@@ -1,0 +1,8 @@
+# never commit keys, logs or local datasets
+*.jsonl
+config.json
+hw-data/
+*.pt
+*.npz
+__pycache__/
+.env

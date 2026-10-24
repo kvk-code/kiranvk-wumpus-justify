@@ -1,0 +1,4 @@
+# Wumpus Justify: never serve the helper library or the prompt file directly
+<FilesMatch "^(lib\.php|judge-prompt\.txt)$">
+  Require all denied
+</FilesMatch>

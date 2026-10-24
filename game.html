@@ -1,0 +1,1207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wumpus Justify — Say Why You Move | PECST522 AI</title>
+<link rel="canonical" href="https://kiranvk.me/ai/wumpus/">
+<meta name="description" content="A Wumpus World game where you must justify every move. Your reasoning is scored, not your luck. Module 3, PECST522 Artificial Intelligence, NSSCE.">
+<script src="wumpus-core.js?v={{V}}"></script>
+<script src="wumpus-logic.js?v={{V}}"></script>
+<script type="text/plain" id="judge-prompt">{{PROMPT}}</script>
+<script type="application/json" id="class-world">{{CLASS_WORLD}}</script>
+<style>
+:root {
+  --bg: #1a1a2e; --bg2: #16213e; --bg3: #0f3460; --accent: #d4a853; --accent2: #e8c77b;
+  --text: #e8e8e8; --text-dim: #a0a0b0; --danger: #e74c3c; --success: #2ecc71;
+  --board-light: #b58863; --board-dark: #6d4c2a; --line: #2b3a5e;
+  --cell-unvisited: #0e1a33; --cell-visited: #26355c; --cell-current: #3a4d7a;
+  --flag-safe: #2ecc71; --flag-pit: #e74c3c; --flag-w: #9b59b6;
+  --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --mono: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+}
+* { box-sizing: border-box; }
+html { font-size: 16px; }
+body { margin: 0; font-family: var(--font); background: var(--bg); color: var(--text); min-height: 100vh; display: flex; flex-direction: column; line-height: 1.5; }
+header { text-align: center; padding: .8rem 1rem .6rem; background: linear-gradient(135deg, var(--bg2), var(--bg3)); border-bottom: 2px solid var(--accent); }
+header h1 { font-size: clamp(1.25rem, 4vw, 2rem); color: var(--accent); font-weight: 700; margin: 0; letter-spacing: .5px; }
+header p { margin: .15rem 0 0; color: var(--text-dim); font-size: .85rem; }
+.badges { display: flex; flex-wrap: wrap; gap: .4rem; justify-content: center; margin-top: .5rem; }
+.badge { font-size: .72rem; padding: .12rem .55rem; border-radius: 999px; border: 1px solid var(--line); color: var(--text-dim); background: rgba(0,0,0,.2); }
+.badge.judge { border-color: var(--accent); color: var(--accent2); }
+.badge.btn { cursor: pointer; }
+.badge.ai-on { border-color: var(--success); color: var(--success); } .badge.ai-bad { border-color: var(--danger); color: var(--danger); } .badge.ai-none, .badge.ai-off { border-color: var(--line); color: var(--text-dim); }
+.ai-line { font-size: .82rem; padding: .4rem .6rem; border-radius: 8px; border: 1px solid var(--line); color: var(--text-dim); }
+.ai-line.ai-on { border-color: var(--success); } .ai-line.ai-on b { color: var(--success); } .ai-line.ai-bad { border-color: var(--danger); } .ai-line.ai-bad b { color: var(--danger); } .ai-line b { color: var(--text); }
+main { flex: 1; width: 100%; max-width: 980px; margin: 0 auto; padding: .8rem 12px 3rem; }
+.hidden { display: none !important; }
+h2 { color: var(--accent2); font-size: 1.05rem; margin: 1rem 0 .4rem; }
+.card { background: var(--bg2); border: 1px solid var(--line); border-radius: 10px; padding: .8rem .9rem; margin: .6rem 0; }
+pre.rules { font-family: var(--mono); font-size: .78rem; white-space: pre-wrap; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: .7rem; margin: .4rem 0 0; line-height: 1.45; }
+button { font: inherit; cursor: pointer; border-radius: 8px; border: 1px solid var(--accent); background: var(--bg3); color: var(--text); padding: .5rem .9rem; }
+button.primary { background: var(--accent); color: #1a1a2e; font-weight: 700; }
+button.ghost { border-color: var(--line); color: var(--text-dim); }
+button:disabled { opacity: .45; cursor: not-allowed; }
+button.small { padding: .25rem .6rem; font-size: .8rem; }
+.row { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
+.worlds { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: .5rem; }
+.world { border: 2px solid var(--line); border-radius: 10px; padding: .6rem; cursor: pointer; background: var(--bg); }
+.world.sel { border-color: var(--accent); }
+.world b { display: block; color: var(--accent2); }
+.world small { color: var(--text-dim); font-size: .75rem; }
+input[type=text], input[type=password], input[type=number], textarea, select { width: 100%; font: inherit; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: .5rem .6rem; }
+textarea { min-height: 5.5em; resize: vertical; font-size: 1rem; }
+label.f { display: block; font-size: .78rem; color: var(--text-dim); margin-top: .5rem; }
+
+/* play layout */
+.play { display: grid; grid-template-columns: minmax(0, 1fr); gap: .8rem; }
+@media (min-width: 760px) { .play { grid-template-columns: 420px minmax(0, 1fr); align-items: start; } }
+.board { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; aspect-ratio: 1; max-width: 100%; width: 100%; background: var(--line); padding: 4px; border-radius: 10px; user-select: none; }
+.cell { position: relative; background: var(--cell-unvisited); border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: clamp(1.1rem, 5vw, 1.8rem); cursor: default; overflow: hidden; border: 2px solid transparent; }
+.cell .coord { position: absolute; top: 2px; left: 4px; font-family: var(--mono); font-size: clamp(.55rem, 2.4vw, .75rem); color: var(--text-dim); }
+.cell.visited { background: var(--cell-visited); }
+.cell.current { border-color: var(--accent); background: var(--cell-current); }
+.cell.adj { cursor: pointer; box-shadow: inset 0 0 0 2px rgba(212,168,83,.35); }
+.cell.adj:hover { box-shadow: inset 0 0 0 2px var(--accent2); }
+.cell.flagmode { cursor: pointer; }
+.cell .p { position: absolute; bottom: 2px; left: 4px; right: 4px; display: flex; gap: 2px; flex-wrap: wrap; }
+.cell .p span { font-family: var(--mono); font-size: clamp(.5rem, 2.2vw, .7rem); padding: 0 3px; border-radius: 3px; background: rgba(0,0,0,.35); color: var(--accent2); }
+.cell .flag { position: absolute; top: 2px; right: 3px; font-size: clamp(.7rem, 3vw, .95rem); }
+.cell.f-SAFE { box-shadow: inset 0 0 0 3px var(--flag-safe); }
+.cell.f-PIT { box-shadow: inset 0 0 0 3px var(--flag-pit); }
+.cell.f-WUMPUS { box-shadow: inset 0 0 0 3px var(--flag-w); }
+.cell.f-BOTH { background: linear-gradient(135deg, rgba(231,76,60,.45) 50%, rgba(155,89,182,.45) 50%); box-shadow: inset 0 0 0 3px var(--flag-w); }
+.cell.reveal-pit::after, .cell.reveal-w::after, .cell.reveal-g::after { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 1.4em; opacity: .85; }
+.cell.reveal-pit::after { content: '🕳️'; } .cell.reveal-w::after { content: '👹'; } .cell.reveal-g::after { content: '💰'; }
+.cell.dead { background: #4a1a1a; }
+.status { font-size: .9rem; }
+.status b { color: var(--accent2); }
+.percept-chips span { display: inline-block; font-family: var(--mono); font-size: .8rem; padding: .1rem .5rem; border-radius: 6px; background: var(--bg3); margin-right: .3rem; color: var(--accent2); }
+.actions { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .5rem; }
+.actions button.on { background: var(--accent); color: #1a1a2e; }
+.scores { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; }
+.score { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: .5rem .6rem; }
+.score b { display: block; font-size: 1.4rem; }
+.score small { color: var(--text-dim); font-size: .72rem; }
+.log { display: flex; flex-direction: column; gap: .5rem; }
+.entry { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: .5rem .7rem; font-size: .88rem; }
+.entry .q { color: var(--text); font-style: italic; }
+.entry .dims { display: flex; gap: .3rem; flex-wrap: wrap; margin: .3rem 0; }
+.dim { font-family: var(--mono); font-size: .72rem; padding: .05rem .4rem; border-radius: 4px; border: 1px solid var(--line); }
+.dim.y { background: rgba(46,204,113,.2); border-color: var(--success); }
+.dim.n { background: rgba(231,76,60,.2); border-color: var(--danger); }
+.dim.na { opacity: .5; }
+.how { font-size: .88rem; margin: .45rem 0; padding-left: .6rem; border-left: 3px solid var(--line); }
+.how b { color: var(--accent2); }
+.coach { color: var(--accent2); }
+.missing { font-size: .84rem; color: var(--danger); margin: .2rem 0 .35rem; line-height: 1.4; }
+.missing span b { font-family: var(--mono); }
+.legend { font-size: .7rem; color: var(--text-dim); margin-top: .35rem; }
+.kb .kb-sec summary { cursor: pointer; color: var(--accent2); font-size: .85rem; }
+.kb-lines { font-family: var(--mono); font-size: .8rem; padding: .3rem 0 .4rem; display: flex; flex-direction: column; gap: .15rem; }
+.kb-lines .n { color: var(--text-dim); display: inline-block; width: 2.2em; }
+.kb-lines .ok { color: var(--success); } .kb-lines .bad { color: var(--danger); } .kb-lines .open { color: var(--accent2); }
+.kb-lines .src { color: var(--text-dim); font-family: var(--font); font-size: .72rem; }
+.mach { margin-top: .4rem; font-size: .84rem; border-top: 1px dashed var(--line); padding-top: .3rem; }
+.deriv { margin-top: .45rem; font-size: .84rem; } .deriv .ok { color: var(--success); } .deriv .bad { color: var(--danger); } .deriv .open { color: var(--accent2); }
+.deriv-body { margin-top: .3rem; padding: .4rem .6rem; border-left: 3px solid var(--line); background: rgba(0,0,0,.2); border-radius: 6px; }
+.proof { margin: .3rem 0 0; padding-left: 1.4rem; } .proof li { margin: .1rem 0; } .proof code { font-size: .8rem; }
+.kb-builder { margin-top: .3rem; } .kb-builder select { width: auto; font-size: .82rem; padding: .3rem .4rem; }
+.explain { border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 8px; padding: .5rem .7rem; margin-top: .6rem; font-size: .86rem; background: rgba(0,0,0,.2); }
+.explain p { margin: .3rem 0; }
+.entry.retried { opacity: .55; }
+.cell.replay-from { box-shadow: inset 0 0 0 3px #4da3ff; } .cell.replay-to { box-shadow: inset 0 0 0 3px var(--accent); animation: pulse 1s ease-in-out infinite alternate; }
+@keyframes pulse { from { filter: brightness(1); } to { filter: brightness(1.5); } }
+#kb-ask-out .ok { color: var(--success); } #kb-ask-out .open { color: var(--accent2); }
+.turn { border-top: 1px dashed var(--line); padding-top: .4rem; margin-top: .4rem; }
+  .q-you { color: var(--text-dim); font-style: italic; font-size: .82rem; margin-bottom: .2rem; }
+.correction { margin-top: .35rem; padding: .3rem .5rem; border-left: 3px solid var(--danger); color: var(--danger); font-size: .82rem; background: rgba(231,76,60,.08); border-radius: 4px; }
+.entry.retried .att { display: inline-block !important; border-color: var(--accent); color: var(--accent2); }
+.formal { font-family: var(--mono); font-size: .8rem; color: var(--text-dim); }
+.verdict-sound { color: var(--success); } .verdict-partial { color: var(--accent2); } .verdict-unsound, .verdict-unsupported { color: var(--danger); }
+.toast { pointer-events: none; position: fixed; left: 50%; bottom: 1rem; transform: translateX(-50%); background: var(--bg3); border: 1px solid var(--accent); color: var(--text); padding: .5rem .9rem; border-radius: 8px; font-size: .85rem; z-index: 50; max-width: 92vw; }
+
+/* modals */
+.modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: flex; align-items: flex-end; justify-content: center; z-index: 40; }
+@media (min-width: 600px) { .modal-bg { align-items: center; } }
+.modal { background: var(--bg2); border: 1px solid var(--accent); border-radius: 14px 14px 0 0; width: 100%; max-width: 640px; max-height: 92vh; overflow: auto; padding: .9rem 1rem 1.2rem; }
+@media (min-width: 600px) { .modal { border-radius: 14px; } }
+.modal h3 { margin: 0 0 .4rem; color: var(--accent); font-size: 1.05rem; }
+.modal .meta { font-size: .82rem; color: var(--text-dim); }
+.verdict { border: 1px solid var(--line); border-radius: 10px; padding: .6rem .8rem; margin-top: .6rem; background: var(--bg); }
+.verdict .big { font-size: 1.5rem; font-weight: 700; }
+.spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--text-dim); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; vertical-align: middle; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.reveal-table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+.reveal-table th, .reveal-table td { text-align: left; padding: .4rem .5rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+.reveal-table td.f { font-family: var(--mono); font-size: .78rem; color: var(--accent2); }
+.closing { border-left: 4px solid var(--accent); padding: .6rem .9rem; background: var(--bg); margin-top: .8rem; font-size: .95rem; }
+.dirs { display: grid; grid-template-columns: repeat(3, 1fr); gap: .3rem; max-width: 220px; margin: .5rem auto; }
+.dirs button { padding: .6rem 0; }
+footer { text-align: center; color: var(--text-dim); font-size: .75rem; padding: .8rem; border-top: 1px solid var(--line); }
+footer a { color: var(--accent2); }
+</style>
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-EYL7B293KM"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'G-EYL7B293KM');
+</script>
+<!-- Matomo (self-hosted, cookieless) kvk-matomo -->
+<script>
+  var _paq = window._paq = window._paq || [];
+  _paq.push(['disableCookies']);
+  _paq.push(['setDoNotTrack', true]);
+  _paq.push(['trackPageView']);
+  _paq.push(['enableLinkTracking']);
+  (function() {
+    var u = 'https://kiranvk.me/analytics/';
+    _paq.push(['setTrackerUrl', u + 'matomo.php']);
+    _paq.push(['setSiteId', '1']);
+    var d = document, g = d.createElement('script'), s = d.getElementsByTagName('script')[0];
+    g.async = true; g.src = u + 'matomo.js'; s.parentNode.insertBefore(g, s);
+  })();
+</script>
+<noscript><img referrerpolicy="no-referrer-when-downgrade" src="https://kiranvk.me/analytics/matomo.php?idsite=1&amp;rec=1" style="border:0" alt="" /></noscript>
+<!-- /kvk-matomo -->
+</head>
+<body>
+<!-- ═══ wrap:v2-theme ═══ -->
+<!-- v2-theme.html — full UX takeover for deep-linked apps. Overrides the
+     app's own theme tokens (--bg, --text, fonts) with v2's paper aesthetic,
+     while preserving game logic and DOM. Uses CSS custom-property re-declare
+     so ANY selector using var(--bg) etc. now paints in paper tones.
+     Safe: reduced-motion respected, print-safe, mobile-safe. -->
+<style id="v2-theme-style">
+  :root {
+    /* --- v2 palette (paper + brick + ink) overrides whatever the app declared --- */
+    --bg:  #f5f0e6 !important;
+    --bg2: #ede4d0 !important;
+    --bg3: #e4d8bf !important;
+    --text:     #1a1614 !important;
+    --text-dim: #5a4f42 !important;
+    --line:     #d9cbb0 !important;
+    --accent:   #c14a2b !important;
+    --accent2:  #a83a1e !important;
+
+    /* Wumpus-specific cell tokens (override game.html's dark navy) */
+    --cell-unvisited: #ede4d0 !important;
+    --cell-visited:   #f5eeda !important;
+    --cell-current:   #fdf3d6 !important;
+    --flag-safe: #3a7d3a !important;
+    --flag-pit:  #c14a2b !important;
+    --flag-w:    #7c3aed !important;
+
+    /* fonts */
+    --font: 'Instrument Serif', Georgia, 'Times New Roman', serif !important;
+    --mono: 'JetBrains Mono', 'Courier New', monospace !important;
+  }
+
+  /* Belt-and-braces: some apps hardcode colors instead of using vars */
+  html, body {
+    background: #f5f0e6 !important;
+    color: #1a1614 !important;
+    font-family: 'Instrument Serif', Georgia, serif !important;
+  }
+  body * {
+    /* Only kill hard-coded dark-navy backgrounds; leave whites, warms, and canvas alone */
+  }
+
+  /* Common dark-theme culprits from the AI games */
+  header, .card, .world, pre.rules, section, article, aside, nav, main, footer,
+  input[type=text], input[type=password], input[type=number], textarea, select {
+    background: var(--bg) !important;
+    color: var(--text) !important;
+    border-color: var(--line) !important;
+  }
+  header {
+    background: linear-gradient(180deg, #f5f0e6, #ede4d0) !important;
+    border-bottom: 1px solid var(--accent) !important;
+  }
+  .card {
+    background: #fdf9ef !important;
+    border: 1px solid var(--line) !important;
+  }
+  pre, code, kbd, samp, .mono {
+    font-family: var(--mono) !important;
+    background: #fdf9ef !important;
+    color: #2a2320 !important;
+  }
+  button, .btn {
+    background: var(--bg2) !important;
+    color: var(--text) !important;
+    border: 1px solid var(--accent) !important;
+    font-family: var(--font) !important;
+  }
+  button.primary, button.accent {
+    background: var(--accent) !important;
+    color: #fdf9ef !important;
+    border-color: var(--accent2) !important;
+    font-weight: 700 !important;
+  }
+  button:hover { background: var(--accent) !important; color: #fdf9ef !important; }
+  .badge, .tag, .chip {
+    background: rgba(193, 74, 43, 0.08) !important;
+    color: var(--accent) !important;
+    border: 1px solid rgba(193, 74, 43, 0.3) !important;
+  }
+  a { color: var(--accent) !important; }
+  a:hover { color: var(--accent2) !important; }
+
+  /* Wumpus grid — pixel-precise tile overrides (bypass --cell-* vars entirely) */
+  #board .cell { background: #ede4d0 !important; color: #1a1614 !important; border-color: #d9cbb0 !important; }
+  #board .cell.visited { background: #f5eeda !important; }
+  #board .cell.current { background: #fdf3d6 !important; border-color: #c14a2b !important; }
+  #board .cell .coord { color: #5a4f42 !important; }
+  #board .cell .p span { background: rgba(193,74,43,0.10) !important; color: #a83a1e !important; }
+  #board.board, #board { background: #d9cbb0 !important; }
+  .world { background: #f5f0e6 !important; border-color: #d9cbb0 !important; }
+  .world b { color: #c14a2b !important; }
+
+  /* Preserve canvas/svg/img rendering — don't touch game-content pixels */
+  canvas, svg, img, video { background: transparent !important; }
+
+  /* Type scale nudge toward v2 */
+  h1, h2, h3 { font-family: 'Instrument Serif', Georgia, serif !important; font-weight: 400 !important; letter-spacing: -0.01em !important; }
+  h1 { color: var(--text) !important; }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation-duration: 0.001s !important; transition-duration: 0.001s !important; }
+  }
+</style>
+
+
+
+
+
+<!-- ═══ wrap:v2-bar ═══ -->
+<!-- v2-bar.html — slim v2-styled top bar injected into deep-linked game apps
+     so they feel continuous with the new site. Loads its own font/color
+     tokens so it works even on pages with no shared CSS. -->
+<style id="v2-bar-style">
+  :root { --v2b-ink:#1a1614; --v2b-paper:#f5f0e6; --v2b-accent:#c14a2b; --v2b-line:#e4dbcb; }
+  #v2-bar { position: fixed; top: 0; left: 0; right: 0; z-index: 9999;
+    display: flex; align-items: center; gap: 14px; padding: 10px 18px;
+    background: rgba(245,240,230,.92); backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--v2b-line);
+    font-family: 'Instrument Serif', Georgia, serif; color: var(--v2b-ink);
+    font-size: 16px; letter-spacing: -.005em;
+  }
+  #v2-bar .wm { font-weight: 400; font-size: 18px; text-decoration: none; color: var(--v2b-ink); }
+  #v2-bar .wm span { color: var(--v2b-accent); }
+  #v2-bar .sep { color: #b6a892; margin: 0 2px; }
+  #v2-bar a.up { text-decoration: none; color: var(--v2b-ink); border-bottom: 1px dashed transparent; padding: 2px 0; transition: border-color .15s; }
+  #v2-bar a.up:hover { border-bottom-color: var(--v2b-accent); }
+  #v2-bar .spacer { flex: 1; }
+  #v2-bar .search-link { font-family: 'JetBrains Mono', monospace; font-size: 12px; letter-spacing: .05em; text-transform: uppercase; color: var(--v2b-ink); text-decoration: none; padding: 4px 10px; border: 1px solid var(--v2b-line); border-radius: 999px; }
+  #v2-bar .search-link:hover { border-color: var(--v2b-accent); color: var(--v2b-accent); }
+  body { padding-top: 46px !important; }
+  @media (max-width: 500px) { #v2-bar { font-size: 14px; padding: 8px 12px; } #v2-bar .search-link { display: none; } }
+  @media print { #v2-bar { display: none; } body { padding-top: 0 !important; } }
+</style>
+<div id="v2-bar" role="banner">
+  <a class="wm" href="/">kvk<span>.</span></a>
+  <span class="sep">/</span>
+  <a class="up" href="/games">Games</a>
+  <div class="spacer"></div>
+  <a class="search-link" href="/search">Search ⌘K</a>
+</div>
+
+<header>
+  <h1>🐲 Wumpus Justify</h1>
+  <p>Say why you move. <strong>Reasoning is what's scored</strong> — a lucky guess scores nothing; sound reasoning that gets you killed scores full marks.</p>
+  <div class="badges">
+    <span class="badge" id="b-world">world: —</span>
+    <span class="badge judge" id="b-judge">coach: local rules</span>
+    <span class="badge btn" id="b-rules">📜 rules</span>
+    <span class="badge btn" id="b-settings">⚙ settings</span>
+  </div>
+</header>
+<main>
+  <!-- START SCREEN -->
+  <section id="start">
+    <div class="card">
+      <h2 style="margin-top:0">Pick a cave</h2>
+      <div class="worlds" id="worlds"></div>
+      <div class="row" id="seed-row" style="margin-top:.5rem">
+        <label class="f" style="margin:0">seed</label>
+        <input type="number" id="seed" value="1234" style="width:120px">
+        <button class="small" id="btn-reseed" type="button">🎲 new seed</button>
+        <span style="font-size:.78rem;color:var(--text-dim)">same seed = same cave for the whole class</span>
+      </div>
+      <div id="ai-status" class="ai-line ai-none" style="margin-top:.6rem">AI coach: checking…</div>
+      <div class="row" style="margin-top:.8rem">
+        <button class="primary" id="btn-start">Enter the cave</button>
+        <button id="btn-resume" class="hidden">▶ Resume</button>
+        <button class="ghost small hidden" id="btn-export-start" title="Save your current game to a file you can open on another device">📤 export game</button>
+        <label id="btn-import" style="display:inline-block;border:1px solid var(--line);border-radius:8px;padding:.25rem .6rem;cursor:pointer;font-size:.8rem;color:var(--text-dim)" title="Continue a game exported from another device">📥 import game<input type="file" id="import-file" accept="application/json,.json" style="display:none"></label>
+        <span style="font-size:.8rem;color:var(--text-dim)">Module 3 · PECST522 Artificial Intelligence · S5 CSE, NSSCE</span>
+      </div>
+    </div>
+    <div class="card">
+      <h2 style="margin-top:0">The rules (that's all of them)</h2>
+<pre class="rules">THE WUMPUS WORLD
+
+You are in a 4×4 cave. Somewhere there is gold. Also: one Wumpus
+(it eats you) and some bottomless pits (you fall).
+
+You can only sense the square you are standing on:
+
+  STENCH  → the Wumpus is in an ADJACENT square (up/down/left/right)
+  BREEZE  → a pit is in an ADJACENT square
+  GLITTER → the gold is HERE
+  BUMP    → you walked into a wall
+  SCREAM  → you shot the Wumpus and killed it (heard anywhere)
+
+"Adjacent" NEVER means diagonal.
+
+You start at [1,1], which is safe.
+You have ONE arrow.
+You win by grabbing the gold and returning to [1,1].
+
+THE CATCH: before every move, you must type WHY that square is
+safe. A lucky guess scores nothing. Good reasoning that gets you
+killed scores full marks.</pre>
+      <p style="font-size:.82rem;color:var(--text-dim);margin:.5rem 0 0"><b style="color:var(--accent2)">How reasoning is scored</b> — one point each per move: <b>R1</b> cite a real percept at a square you visited · <b>R2</b> the conclusion follows by the adjacency rule · <b>R3</b> combine two observations (not on the first move) · <b>R4</b> your certainty matches what you proved. <a href="#" id="start-how" style="color:var(--accent2)">Details</a>.</p>
+      <p style="font-size:.82rem;color:var(--text-dim);margin:.5rem 0 0">Squares are <code>[column,row]</code>; <code>[1,1]</code> is bottom-left, exactly as on the projected slide. Tap an adjacent square to move. Use 🚩 to mark squares SAFE / PIT? / WUMPUS? — the difference between "proved safe" and "not yet proved dangerous" is the whole lesson.</p>
+    </div>
+  </section>
+
+  <!-- PLAY SCREEN -->
+  <section id="play" class="hidden">
+    <div class="play">
+      <div>
+        <div class="board" id="board"></div>
+        <div class="card status" id="status"></div>
+        <div class="actions" id="actions">
+          <button id="btn-flag" title="Flag mode: tap squares to cycle SAFE → PIT? → WUMPUS? → both → none">🚩 flag</button>
+          <button id="btn-shoot">🏹 shoot</button>
+          <button id="btn-climb" class="hidden">🪜 climb out</button>
+          <button id="btn-reveal" class="ghost">🔍 reveal</button>
+          <button id="btn-export" class="ghost" title="Save this game to a file (continue later on any device)">💾 export</button>
+          <button id="btn-new" class="ghost">🔄 new game</button>
+        </div>
+      </div>
+      <div>
+        <div class="scores">
+          <div class="score"><b id="s-reason">0 / 0</b><small>REASONING SCORE (the one that matters) · <a href="#" id="s-how" style="color:var(--accent2)">how is it scored?</a></small></div>
+          <div class="score"><b id="s-surv">alive</b><small id="s-surv-sub">SURVIVAL · 0 moves · no gold</small></div>
+        </div>
+        <div class="card" style="font-size:.8rem;color:var(--text-dim)" id="flagstat">Flag accuracy: no SAFE flags yet.</div>
+        <div class="card kb" id="kb">
+          <div class="row" style="justify-content:space-between;margin-bottom:.3rem"><h2 style="margin:0">📚 Knowledge base</h2><span class="meta" id="kb-count"></span></div>
+          <details class="kb-sec"><summary>Rules (background knowledge)</summary>
+            <div class="kb-lines"><div>B(c,r) ⇔ a pit is in a square adjacent to (c,r)</div><div>S(c,r) ⇔ the Wumpus is in a square adjacent to (c,r)</div><div>G(c,r) ⇔ the gold is at (c,r)</div><div>adjacent = up, down, left, right — never diagonal · exactly one Wumpus</div></div></details>
+          <details class="kb-sec" open><summary>Percept sentences — TELL (added automatically at every square)</summary><div class="kb-lines" id="kb-tell"></div></details>
+          <details class="kb-sec" open><summary>Derived sentences — yours (from your justifications, or added below)</summary>
+            <div class="kb-lines" id="kb-derived"><div class="meta">Nothing derived yet. Every reason you submit adds its claim here, checked against the KB.</div></div>
+            <div id="kb-consistency" class="hidden" style="color:var(--danger);font-size:.84rem;margin:.2rem 0"></div>
+            <div class="row kb-builder">
+              <select id="kb-kind"></select>
+              <input type="text" id="kb-sq" placeholder="squares, e.g. 2,2 3,1" style="flex:1;min-width:120px">
+              <button class="small" id="kb-add">Add</button>
+              <button class="small ghost" id="kb-reset" title="Clear your derived sentences (percepts stay)">reset</button>
+            </div>
+            <div class="meta">✓ entailed by the KB · × contradicts the KB · ? not (yet) entailed — a guess</div></details>
+          <div class="hidden" id="kb-ask-row" style="margin-top:.4rem"><div class="row"><input type="text" id="kb-ask-sq" placeholder="ASK: square, e.g. 2,2" style="width:140px"><button class="small" id="kb-ask">ASK the KB</button><span class="meta">(lecturer / after the game)</span></div><div id="kb-ask-out" style="font-size:.84rem;margin-top:.3rem"></div></div>
+        </div>
+        <h2>Your reasoning, move by move</h2>
+        <div class="log" id="log"><div class="entry" style="color:var(--text-dim)">Nothing yet. Tap a square next to you.</div></div>
+      </div>
+    </div>
+  </section>
+</main>
+<footer>PECST522 AI · Module 3 Knowledge &amp; Reasoning · <a href="../8queens/">8-Queens</a> · <a href="../vacuum/">Vacuum World</a> · <a href="https://kiranvk.me">kiranvk.me</a></footer>
+
+<div id="modal-root"></div>
+<script>
+(function () {
+  'use strict';
+  const W = window.WumpusCore;
+  const L = window.WumpusLogic; // Module 3 engine: CNF + truth-table entailment + resolution refutation
+  const $ = (s) => document.querySelector(s);
+  const key = W.key, eq = W.eq;
+  const fmt = (sq) => '[' + sq[0] + ',' + sq[1] + ']';
+  const PROMPT = (() => { const t = document.getElementById('judge-prompt').textContent.trim(); return t && t !== '{{' + 'PROMPT}}' ? t : ''; })(); // sentinel split so index.php's substitution cannot touch this literal
+
+  // ---------- settings (localStorage) ----------
+  const LS = 'wumpus-justify-settings';
+  const settings = Object.assign({ judgeMode: 'auto', lecturerCode: '', byokKey: '', byokModel: '', nvKey: '', nvKeyStatus: null }, (() => { try { return JSON.parse(localStorage.getItem(LS) || '{}'); } catch { return {}; } })());
+  // nvKeyStatus: {ok, at, model, error} — set by "Test key", by a successful/rejected judge call, and by a silent daily re-check
+  function setKeyStatus(ok, extra) { settings.nvKeyStatus = Object.assign({ ok, at: Date.now() }, extra || {}); saveSettings(); updateJudgeBadge(); }
+  async function verifyKeyQuietly() {
+    if (!settings.nvKey || serverInfo.lecturer) return;
+    const st = settings.nvKeyStatus; if (st && st.ok && Date.now() - st.at < 24 * 3600 * 1000) return; // checked within a day
+    try { const r = await withTimeout(fetch('judge.php', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ test_key: settings.nvKey }) }), 40000); const j = await r.json(); setKeyStatus(!!j.ok, { model: j.model, error: j.ok ? '' : (j.error || j.reason || '') }); } catch (e) { setKeyStatus(false, { error: e.message }); }
+  }
+  const saveSettings = () => { try { localStorage.setItem(LS, JSON.stringify(settings)); } catch {} };
+  let serverInfo = { available: false, mode: 'off', lecturer: false, byok_model: 'nvidia/nemotron-3-super-120b-a12b:free' };
+  let nudged = false;
+  fetch('judge.php?info=1', { cache: 'no-store' }).then((r) => r.json()).then((j) => { serverInfo = j; updateJudgeBadge(); applyClassWorld(); verifyKeyQuietly(); }).catch(() => {});
+  // the lecturer can pin the cave the public game opens with (dashboard → Class cave); a ?world= / ?seed= link always wins
+  function applyClassWorld() {
+    const cw = serverInfo.class_world; if (!cw || cw.mode !== 'pinned' || G || (!lockedCave && (params.get('world') || params.get('seed')))) return;
+    selWorld = ['canonical', 'fork', 'cruel', 'random'].includes(cw.world) ? cw.world : 'canonical';
+    if (selWorld === 'random' && cw.seed) $('#seed').value = String(cw.seed);
+    pinnedByLecturer = true; renderWorlds();
+  }
+  let pinnedByLecturer = false;
+  let lockedCave = null; // {world, seed} when the lecturer pinned a cave and this visitor is not the lecturer
+  (function readClassWorld() {
+    try {
+      const raw = document.getElementById('class-world').textContent.trim(); if (!raw || raw.startsWith('{{')) return;
+      const j = JSON.parse(raw); serverInfo.class_world = j.class_world; serverInfo.lecturer = !!j.lecturer;
+      const cw = j.class_world;
+      if (cw && cw.mode === 'pinned' && !j.lecturer) lockedCave = { world: ['canonical', 'fork', 'cruel', 'random'].includes(cw.world) ? cw.world : 'canonical', seed: Number(cw.seed) || 1234 };
+    } catch {}
+  })();
+
+  // {label, state: 'on'|'off'|'bad'|'none', detail}
+  function aiSupport() {
+    if (settings.judgeMode === 'local') return { label: 'coach: local rules (AI switched off in settings)', state: 'off', detail: 'You chose local rules only. Switch the coach in ⚙ settings to use an AI key.' };
+    if (serverInfo.lecturer) return { label: 'AI coach ● lecturer key', state: 'on', detail: 'Signed in as lecturer: the embedded AI key is active in this browser.' };
+    if (settings.nvKey) {
+      const st = settings.nvKeyStatus;
+      if (st && st.ok) return { label: 'AI coach ● your NVIDIA key connected', state: 'on', detail: 'Your NVIDIA key works (checked ' + timeAgo(st.at) + (st.model ? ', ' + st.model.split('/').pop() : '') + '). AI explanations and follow-ups are available.' };
+      if (st && !st.ok) return { label: 'AI coach ● key NOT working', state: 'bad', detail: 'NVIDIA rejected your key' + (st.error ? ' (' + st.error + ')' : '') + '. Check it in ⚙ settings — the local rules keep judging meanwhile.' };
+      return { label: 'AI coach ○ key saved, not yet checked', state: 'off', detail: 'Press "Test key" in ⚙ settings to confirm it works.' };
+    }
+    if (settings.byokKey) return { label: 'AI coach ● your OpenRouter key', state: 'on', detail: 'Your OpenRouter key is used directly from this browser.' };
+    if (serverInfo.available && (serverInfo.mode === 'open' || (serverInfo.mode === 'code' && settings.lecturerCode))) return { label: 'AI coach ● ' + (serverInfo.provider || '').replace(/\s*\(.*\)$/, ''), state: 'on', detail: 'The course AI coach is available to you right now.' };
+    return { label: 'AI coach ○ not connected — local rules only', state: 'none', detail: serverInfo.mode === 'byok' ? 'Add your free NVIDIA key in ⚙ settings to get AI explanations and follow-up questions. The rule-based judge works without it.' : 'No AI key in use. The rule-based judge works without it.' };
+  }
+  function timeAgo(t) { const m = Math.round((Date.now() - t) / 60000); return m < 1 ? 'just now' : m < 60 ? m + ' min ago' : m < 1440 ? Math.round(m / 60) + ' h ago' : Math.round(m / 1440) + ' d ago'; }
+  function judgeLabel() { return aiSupport().label; }
+  let G = null; // game state (declared here: updateJudgeBadge runs at load and looks at it)
+  function updateJudgeBadge() {
+    const a = aiSupport(); const b = $('#b-judge'); b.textContent = a.label; b.className = 'badge judge ai-' + a.state; b.title = a.detail;
+    const line = $('#ai-status'); if (line) { line.className = 'ai-line ai-' + a.state; line.innerHTML = `<b>${escapeHtml(a.label)}</b> — ${escapeHtml(a.detail)}`; }
+    if (G) renderKB();
+  }
+  updateJudgeBadge();
+
+  // ---------- game state ----------
+  let flagMode = false;
+  const params = new URLSearchParams(location.search);
+  // A fresh cave on every load (the named worlds stay one tap away). ?seed=1234 or ?world=canonical pins one for the whole class.
+  const freshSeed = () => 1000 + Math.floor(Math.random() * 899999);
+  let selWorld = ['canonical', 'fork', 'cruel', 'random'].includes(params.get('world')) ? params.get('world') : 'random';
+  $('#seed').value = params.get('seed') && Number(params.get('seed')) ? params.get('seed') : String(freshSeed());
+  if (params.get('seed') && !params.get('world')) selWorld = 'random';
+  if (lockedCave) { selWorld = lockedCave.world; $('#seed').value = String(lockedCave.seed); pinnedByLecturer = true; $('#seed').readOnly = true; $('#btn-reseed').classList.add('hidden'); }
+  $('#btn-reseed').onclick = () => { $('#seed').value = String(freshSeed()); };
+
+  function renderWorlds() {
+    let list = [{ id: 'random', name: 'Random cave', blurb: 'New layout every time. Share the seed so the whole class gets the same one.' }, W.WORLDS.canonical, W.WORLDS.fork, W.WORLDS.cruel];
+    if (lockedCave) { selWorld = lockedCave.world; list = list.filter((w) => w.id === lockedCave.world).map((w) => Object.assign({}, w, { blurb: 'Set by your lecturer for this class — everyone plays this cave' + (lockedCave.world === 'random' ? ' (seed ' + lockedCave.seed + ')' : '') + '.' })); }
+    $('#worlds').innerHTML = list.map((w) => `<div class="world ${w.id === selWorld ? 'sel' : ''}" data-id="${w.id}"><b>${w.name}${pinnedByLecturer && w.id === selWorld ? ' <span class="badge" style="font-size:.62rem">class cave</span>' : ''}</b><small>${w.blurb}</small></div>`).join('');
+    $('#worlds').querySelectorAll('.world').forEach((el) => el.onclick = () => { if (lockedCave) return; selWorld = el.dataset.id; renderWorlds(); });
+    $('#seed-row').style.display = selWorld === 'random' && !lockedCave ? 'flex' : 'none';
+  }
+  renderWorlds();
+
+  function newGame() {
+    try { localStorage.removeItem(SAVE); } catch {}
+    if (lockedCave) { selWorld = lockedCave.world; $('#seed').value = String(lockedCave.seed); }
+    const seed = Number($('#seed').value) || 1234;
+    const world = W.getWorld(selWorld, seed);
+    G = {
+      world, pos: world.start.slice(), visited: [world.start.slice()], history: [], flags: {}, flagLog: [],
+      arrows: 1, hasGold: false, alive: true, over: false, outcome: '', wumpusAlive: true,
+      moveNumber: 0, transcript: [], reasoning: { total: 0, max: 0 }, dimSum: { R1: [0, 0], R2: [0, 0], R3: [0, 0], R4: [0, 0] }, moves: 0, revealed: false, kb: [],
+    };
+    G.history.push({ square: world.start.slice(), percepts: W.perceptsAt(world.start, world) });
+    $('#start').classList.add('hidden'); $('#play').classList.remove('hidden');
+    $('#b-world').textContent = 'world: ' + (world.id === 'random' ? 'random · seed ' + seed : world.name);
+    $('#b-world').title = world.id === 'random' ? 'Share ' + location.origin + location.pathname + '?seed=' + seed + ' to give others this exact cave' : '';
+    G.seed = seed;
+    const url = new URL(location.href);
+    if (lockedCave) { url.searchParams.delete('world'); url.searchParams.delete('seed'); }
+    else if (world.id !== 'random') { url.searchParams.set('world', world.id); url.searchParams.delete('seed'); }
+    else { url.searchParams.delete('world'); if (params.get('seed')) url.searchParams.set('seed', String(seed)); else url.searchParams.delete('seed'); }
+    history.replaceState(null, '', url);
+    flagMode = false; $('#btn-flag').classList.remove('on');
+    $('#log').innerHTML = '<div class="entry" style="color:var(--text-dim)">Nothing yet. Tap a square next to you.</div>';
+    render();
+  }
+
+  const currentPercepts = () => G.history[G.history.length - 1].percepts;
+
+  // ---------- knowledge base panel ----------
+  function kbAdd(sentence, src) { G.kb = G.kb || []; G.kb.push({ kind: sentence.kind, squares: sentence.squares, src: src || 'you', move: G.moveNumber }); renderKB(); saveGame(); }
+  const askCache = new Map();
+  function kbAsk(s) { // truth-table entailment (complete); the fast propagator only if the table is too large
+    const k = JSON.stringify([distinctHistory(), s.kind, s.squares]);
+    if (askCache.has(k)) return askCache.get(k);
+    let out; try { out = L.ask(distinctHistory(), s, { ttLimit: 1500000, maxSteps: 1500 }); } catch (e) { out = { status: 'unknown', tt: {}, resolution: { proved: false } }; }
+    if (out.status === 'unknown') out.status = W.checkSentence(distinctHistory(), G.visited, s);
+    askCache.set(k, out); return out;
+  }
+  function kbStatus(s) { return kbAsk(s).status; }
+  function renderKB() {
+    if (!G) return;
+    const tell = W.kbPercepts(distinctHistory());
+    $('#kb-tell').innerHTML = tell.map((t, i) => `<div><span class="n">${i + 1}.</span>${escapeHtml(t.text)}${t.scream ? ' <span class="src">+ Scream heard: the Wumpus is dead</span>' : ''}</div>`).join('') || '<div class="meta">—</div>';
+    const kb = G.kb || [];
+    const marks = { entailed: ['✓', 'ok'], refuted: ['×', 'bad'], open: ['?', 'open'] };
+    const P = (sq) => '(' + sq[0] + ',' + sq[1] + ')';
+    $('#kb-derived').innerHTML = kb.length ? kb.map((s, i) => {
+      const st = kbStatus(s); const [m, cls] = marks[st];
+      let note = st === 'refuted' ? ' — the KB says otherwise' : st === 'open' ? ' — not entailed: a guess, not a proof' : '';
+      let resolveBtn = '';
+      const r = W.resolveDisjunction(distinctHistory(), G.visited, s);
+      if (r && !s.resolvedShown) {
+        const lit = (q) => (s.kind === 'pitOr' ? '¬P' : '¬W') + P(q);
+        note += ` — weaker than needed: ${r.dead.map(lit).join(', ')} ${r.dead.length > 1 ? 'are' : 'is'} already known, so <b>unit resolution</b> gives ${r.resolved ? escapeHtml(W.sentenceText(r.resolved)) : '⊥ (every disjunct is refuted!)'}`;
+        if (r.resolved) resolveBtn = ` <a href="#" class="kb-resolve" data-i="${i}" style="color:var(--accent2)">apply resolution</a>`;
+      }
+      const tt = kbAsk(s).tt || {}; const models = tt.modelsOfKB ? (st === 'entailed' ? ` · true in all ${tt.modelsOfKB} models of the KB` : st === 'open' ? ` · false in ${tt.modelsWhereAlphaFalse} of ${tt.modelsOfKB} models` : '') : '';
+      return `<div><span class="n">${tell.length + i + 1}.</span><span class="${cls}">${m}</span> ${escapeHtml(W.sentenceText(s))} <span class="src">${s.src === 'you' ? 'added by you' : s.src === 'resolution' ? 'by resolution from ' + (s.fromN || '?') : 'from move #' + s.move}${note}${models}${resolveBtn}</span></div>`;
+    }).join('') : '<div class="meta">Nothing derived yet. Every reason you submit adds its claim here, checked against the KB.</div>';
+    // do the derived sentences contradict each other (or the KB) when taken together?
+    const banner = $('#kb-consistency');
+    if (kb.length >= 2) {
+      let c; try { c = L.consistent(distinctHistory(), kb, { ttLimit: 1500000 }); } catch (e) { c = { consistent: null }; }
+      if (c && c.consistent === false) { banner.classList.remove('hidden'); banner.innerHTML = `‼ Your derived sentences are <b>inconsistent</b> with your percepts when taken together: no world satisfies all of them. Look at ${c.culprits.map((i) => 'sentence ' + (tell.length + i + 1)).join(', ')}.`; }
+      else banner.classList.add('hidden');
+    } else banner.classList.add('hidden');
+    $('#kb-derived').querySelectorAll('.kb-resolve').forEach((a) => a.onclick = (e) => {
+      e.preventDefault(); const src = G.kb[Number(a.dataset.i)]; const r = W.resolveDisjunction(distinctHistory(), G.visited, src);
+      if (!r || !r.resolved) return; src.resolvedShown = true;
+      G.kb.push({ kind: r.resolved.kind, squares: r.resolved.squares, src: 'resolution', move: G.moveNumber, fromN: 'sentence ' + (tell.length + Number(a.dataset.i) + 1) });
+      renderKB(); saveGame(); toast('Resolution applied: the refuted disjunct is dropped.', 2500);
+    });
+    const good = kb.filter((s) => kbStatus(s) === 'entailed').length;
+    $('#kb-count').textContent = `${tell.length} facts · ${kb.length} derived (${good} entailed)`;
+    $('#kb-ask-row').classList.toggle('hidden', !(serverInfo.lecturer || G.over));
+  }
+  function parseSquares(str) { const out = []; const re = /([1-4])\s*[,\.]\s*([1-4])/g; let m; while ((m = re.exec(str))) out.push([Number(m[1]), Number(m[2])]); return out; }
+  $('#kb-kind').innerHTML = Object.entries(W.KB_KINDS).map(([k, l]) => `<option value="${k}">${l}</option>`).join('');
+  $('#kb-add').onclick = () => {
+    const kind = $('#kb-kind').value; const sqs = parseSquares($('#kb-sq').value);
+    if (!sqs.length) return toast('Give a square like 2,2 (or two for "one of": 2,2 3,1)');
+    const one = ['noPit', 'noW', 'safe', 'pit', 'wumpus'].includes(kind);
+    kbAdd({ kind, squares: one ? [sqs[0]] : sqs }, 'you'); $('#kb-sq').value = '';
+  };
+  $('#kb-sq').onkeydown = (e) => { if (e.key === 'Enter') $('#kb-add').click(); };
+  $('#kb-reset').onclick = () => { if (!G || !(G.kb || []).length) return; G.kb = []; renderKB(); saveGame(); toast('Derived sentences cleared. Percepts stay — they are facts.'); };
+  $('#kb-ask').onclick = () => {
+    const sqs = parseSquares($('#kb-ask-sq').value); if (!sqs.length) return;
+    const hist = distinctHistory(); const K = W.knowledge(hist, G.visited); const sq = sqs[0]; const k = K[key(sq)]; const f = fmt(sq);
+    const adj = hist.filter((h) => W.adjacent(h.square, sq));
+    const proved = [], open = [];
+    if (k.visited) proved.push(`safe — you have stood on ${f}`);
+    else {
+      const noB = adj.filter((h) => !h.percepts.includes('breeze')), noS = adj.filter((h) => !h.percepts.includes('stench'));
+      const B = adj.filter((h) => h.percepts.includes('breeze')), S = adj.filter((h) => h.percepts.includes('stench'));
+      if (k.pit === 'no') proved.push(`¬P${f} (no pit) — ${noB.length ? 'no breeze at ' + noB.map((h) => fmt(h.square)).join(', ') + ', adjacent' : 'by elimination'}`);
+      else if (k.pit === 'yes') proved.push(`P${f} (a pit) — the only candidate left for the breeze at ${B.map((h) => fmt(h.square)).join(', ')}`);
+      else open.push(`P${f} (a pit) — ${B.length ? 'the breeze at ' + B.map((h) => fmt(h.square)).join(', ') + ' leaves a pit possible at ' + B.flatMap((h) => W.neighbours(h.square).filter((n) => K[key(n)].pit !== 'no').map(fmt)).filter((x, i, a) => a.indexOf(x) === i).join(' or ') : 'no visited square next to it has ruled a pit out'}`);
+      if (k.wumpus === 'no') proved.push(`¬W${f} (no Wumpus) — ${noS.length ? 'no stench at ' + noS.map((h) => fmt(h.square)).join(', ') + ', adjacent' : G.wumpusAlive ? 'by elimination' : 'the Wumpus is dead'}`);
+      else if (k.wumpus === 'yes') proved.push(`W${f} (the Wumpus) — the only candidate left for the stench at ${S.map((h) => fmt(h.square)).join(', ')}`);
+      else open.push(`W${f} (the Wumpus) — ${S.length ? 'the stench at ' + S.map((h) => fmt(h.square)).join(', ') + ' leaves it possible' : 'no visited square next to it has ruled the Wumpus out'}`);
+    }
+    const verdict = k.visited || k.safe ? `KB ⊨ safe ${f}` : (k.pit === 'yes' || k.wumpus === 'yes') ? `KB ⊨ dangerous ${f}` : `KB ⊭ safe ${f} and KB ⊭ dangerous ${f} — undecided`;
+    // the machine's two procedures on the question "is this square safe?"
+    const q = k.visited ? null : kbAsk({ kind: 'safe', squares: [sq] });
+    let machine = '';
+    if (q && q.tt && q.tt.modelsOfKB) {
+      const tt = q.tt;
+      machine += `<div class="mach"><b>Truth-table model checking:</b> your percept sentences have <b>${tt.modelsOfKB}</b> models over ${tt.symbols} symbols. "safe ${f}" is ${tt.entailed ? 'true in every one of them → entailed' : `false in ${tt.modelsWhereAlphaFalse} of them → not entailed`}.${tt.counterexample ? ` One world that fits everything you sensed but where ${f} is not safe: ${tt.counterexample.filter((x) => /^[PW]/.test(x)).map(L.pretty).join(', ') || '(no pit or Wumpus on the frontier)'}.` : ''}</div>`;
+      if (q.resolution && q.resolution.proved) machine += `<div class="mach"><b>Resolution refutation</b> (assume ¬safe ${f}, derive □):<ol class="proof">${q.resolution.steps.map((st) => `<li><code>${escapeHtml(st.text)}</code> <span class="meta">${escapeHtml(st.label)}</span></li>`).join('')}</ol></div>`;
+      else if (tt.entailed) machine += `<div class="meta">Entailed by the truth table; resolution search hit its step limit before finding the empty clause.</div>`;
+    }
+    $('#kb-ask-out').innerHTML = `<div><b>${escapeHtml(verdict)}</b></div>${proved.map((x) => `<div class="ok">proved: ${escapeHtml(x)}</div>`).join('')}${open.map((x) => `<div class="open">cannot decide: ${escapeHtml(x)}</div>`).join('')}${machine}<div class="meta">⊨ = the KB entails it (it must be true in every world that fits your percepts) · ⊭ = the KB does not entail it — it may be true, but your percepts cannot prove it.</div>`;
+  };
+  // one entry per square (a retreat re-visits a square; its percepts do not change)
+  const distinctHistory = () => { const seen = new Set(); return G.history.filter((h) => { const k = key(h.square); if (seen.has(k)) return false; seen.add(k); return true; }).map((h) => ({ square: h.square.slice(), percepts: h.percepts.slice() })); };
+  const isVisited = (sq) => G.visited.some((v) => eq(v, sq));
+  const knowledgeNow = () => W.knowledge(G.history, G.visited);
+  const flagForJudge = () => { const o = {}; for (const k in G.flags) o[k] = { SAFE: 'SAFE', PIT: 'PIT?', WUMPUS: 'WUMPUS?', BOTH: 'PIT?+WUMPUS?' }[G.flags[k]]; return o; };
+
+  // ---------- render ----------
+  function render() {
+    const w = G.world; const board = $('#board'); board.innerHTML = '';
+    const adj = W.neighbours(G.pos);
+    for (let r = w.size; r >= 1; r--) for (let c = 1; c <= w.size; c++) {
+      const sq = [c, r], k = key(sq);
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+      const vis = isVisited(sq);
+      if (vis) cell.classList.add('visited');
+      if (eq(sq, G.pos)) cell.classList.add('current');
+      if (!G.over && adj.some((n) => eq(n, sq))) cell.classList.add('adj');
+      if (flagMode && !vis) cell.classList.add('flagmode');
+      if (G.flags[k]) cell.classList.add('f-' + G.flags[k]);
+      let inner = `<span class="coord">[${c},${r}]</span>`;
+      if (eq(sq, G.pos)) inner += G.alive ? '🧑‍🚀' : '💀';
+      const h = G.history.find((x) => eq(x.square, sq));
+      if (vis && h) inner += `<span class="p">${h.percepts.filter((p) => p !== 'scream').map((p) => `<span>${p[0].toUpperCase()}</span>`).join('')}</span>`;
+      if (G.flags[k]) inner += `<span class="flag">${{ SAFE: '🟢', PIT: '🔴', WUMPUS: '🟣', BOTH: '🔴🟣' }[G.flags[k]]}</span>`;
+      if (G.revealed) {
+        if (w.pits.some((p) => eq(p, sq))) cell.classList.add('reveal-pit');
+        else if (eq(sq, w.wumpus)) cell.classList.add('reveal-w');
+        else if (eq(sq, w.gold) && !G.hasGold) cell.classList.add('reveal-g');
+      }
+      if (G.flags[k] === 'BOTH') cell.title = 'could be either — avoid until certain';
+      cell.innerHTML = inner;
+      cell.onclick = () => onCell(sq);
+      board.appendChild(cell);
+    }
+    const ps = currentPercepts().filter((p) => p !== 'scream');
+    $('#status').innerHTML = `You are at <b>${fmt(G.pos)}</b> · percepts here: <span class="percept-chips">${ps.length ? ps.map((p) => `<span>${p.toUpperCase()}</span>`).join('') : '<span style="color:var(--text-dim)">none</span>'}</span><br>
+      <span style="font-size:.8rem;color:var(--text-dim)">arrow: ${G.arrows ? '1' : 'used'} · gold: ${G.hasGold ? 'in hand 💰' : 'not yet'} · Wumpus: ${G.wumpusAlive ? 'alive' : 'dead'}${G.over ? ' · <b style="color:var(--accent2)">' + G.outcome + '</b>' : ''}</span>`;
+    $('#btn-shoot').disabled = G.over || !G.arrows;
+    $('#btn-climb').classList.toggle('hidden', G.over || !eq(G.pos, w.start));
+    $('#btn-flag').disabled = G.over;
+    $('#s-reason').textContent = `${G.reasoning.total} / ${G.reasoning.max}`;
+    $('#s-surv').textContent = G.over ? G.outcome : 'alive';
+    $('#s-surv-sub').textContent = `SURVIVAL · ${G.moves} move${G.moves === 1 ? '' : 's'} · ${G.hasGold ? 'gold in hand' : 'no gold'}`;
+    const safeFlags = G.flagLog.filter((f) => f.flag === 'SAFE');
+    const unproved = safeFlags.filter((f) => !f.proved).length;
+    renderKB();
+    saveGame();
+    $('#flagstat').innerHTML = safeFlags.length ? `Flag accuracy: <b style="color:${unproved ? 'var(--danger)' : 'var(--success)'}">${unproved} of ${safeFlags.length}</b> SAFE flags were placed on squares you had only failed to prove <em>dangerous</em> — not proved safe.` : 'Flag accuracy: no SAFE flags yet. (🟢 SAFE should mean <em>proved</em> safe, not "no bad news yet".)';
+  }
+
+  function toast(msg, ms) { const t = document.createElement('div'); t.className = 'toast'; t.textContent = msg; document.body.appendChild(t); setTimeout(() => t.remove(), ms || 2200); }
+
+  // ---------- interactions ----------
+  function onCell(sq) {
+    if (G.over) return;
+    const k = key(sq);
+    if (flagMode) {
+      if (isVisited(sq)) return toast('You have stood there — it is proved safe.');
+      const cycle = [undefined, 'SAFE', 'PIT', 'WUMPUS', 'BOTH'];
+      const next = cycle[(cycle.indexOf(G.flags[k]) + 1) % cycle.length];
+      if (next) G.flags[k] = next; else delete G.flags[k];
+      if (next === 'SAFE') G.flagLog.push({ sq, flag: 'SAFE', proved: !!knowledgeNow()[k].safe, move: G.moveNumber });
+      render(); return;
+    }
+    if (eq(sq, G.pos)) return;
+    if (!W.adjacent(G.pos, sq)) { const dc = Math.abs(sq[0] - G.pos[0]), dr = Math.abs(sq[1] - G.pos[1]); return toast(dc === 1 && dr === 1 ? 'No diagonals! Adjacent means up, down, left or right.' : 'Too far — move one square at a time.'); }
+    if (isVisited(sq)) openJustify({ action: 'retreat', target: sq });
+    else openJustify({ action: 'move', target: sq });
+  }
+  $('#btn-flag').onclick = () => { flagMode = !flagMode; $('#btn-flag').classList.toggle('on', flagMode); toast(flagMode ? 'Flag mode: tap an unvisited square to cycle 🟢 SAFE → 🔴 PIT? → 🟣 WUMPUS? → both → clear' : 'Flag mode off', 2600); render(); };
+  $('#btn-new').onclick = () => { closeModal(); if (!params.get('seed') && !(pinnedByLecturer && selWorld === 'random')) $('#seed').value = String(freshSeed()); $('#play').classList.add('hidden'); $('#start').classList.remove('hidden'); renderResume(); };
+  $('#btn-start').onclick = newGame;
+  $('#btn-climb').onclick = () => { if (!G.over && eq(G.pos, G.world.start)) endGame(G.hasGold ? 'WON — out with the gold' : 'climbed out without the gold', true); };
+  $('#btn-reveal').onclick = () => openReveal();
+  $('#s-how').onclick = (e) => { e.preventDefault(); openHowScored(); };
+  $('#b-rules').onclick = () => openModal(`<h3>The rules</h3>${$('pre.rules').outerHTML}<div class="row" style="margin-top:.6rem"><button class="primary" data-close>Back</button></div>`);
+  $('#b-settings').onclick = openSettings;
+  $('#btn-shoot').onclick = () => {
+    if (G.over || !G.arrows) return;
+    const dirs = { up: [0, 1], down: [0, -1], left: [-1, 0], right: [1, 0] };
+    openModal(`<h3>🏹 Shoot your only arrow</h3><p class="meta">The arrow flies from ${fmt(G.pos)} in a straight line until it hits the Wumpus or a wall. Pick a direction, then say where you think the Wumpus is and why.</p>
+      <div class="dirs"><span></span><button data-dir="up">▲</button><span></span><button data-dir="left">◀</button><button class="ghost" data-close>✕</button><button data-dir="right">▶</button><span></span><button data-dir="down">▼</button><span></span></div>`);
+    document.querySelectorAll('[data-dir]').forEach((b) => b.onclick = () => {
+      const d = dirs[b.dataset.dir]; const path = [];
+      let s = [G.pos[0] + d[0], G.pos[1] + d[1]];
+      while (s[0] >= 1 && s[0] <= 4 && s[1] >= 1 && s[1] <= 4) { path.push(s); s = [s[0] + d[0], s[1] + d[1]]; }
+      if (!path.length) return toast('That is a wall.');
+      openJustify({ action: 'shoot', dir: b.dataset.dir, path, target: path[0] });
+    });
+  };
+
+  // ---------- modals ----------
+  function openModal(html) { closeModal(); const bg = document.createElement('div'); bg.className = 'modal-bg'; bg.innerHTML = `<div class="modal">${html}</div>`; $('#modal-root').appendChild(bg); bg.querySelectorAll('[data-close]').forEach((b) => b.onclick = closeModal); return bg; }
+  function closeModal() { $('#modal-root').innerHTML = ''; document.querySelectorAll('#board .replay-from, #board .replay-to').forEach((c) => c.classList.remove('replay-from', 'replay-to')); }
+
+  function openJustify(act) {
+    const hist = distinctHistory().map((h) => `${fmt(h.square)}: ${h.percepts.filter((p) => p !== 'scream').length ? h.percepts.filter((p) => p !== 'scream').join(', ') : 'nothing'}`).join(' · ');
+    const isRetreat = act.action === 'retreat', isShoot = act.action === 'shoot';
+    const title = isShoot ? `🏹 Where is the Wumpus?` : isRetreat ? `↩ Retreat to ${fmt(act.target)}` : `Why is ${fmt(act.target)} safe?`;
+    const targetPick = isShoot ? `<label class="f">I think the Wumpus is at</label><select id="j-target">${act.path.map((s) => `<option value="${key(s)}">${fmt(s)}</option>`).join('')}</select>` : '';
+    const ph = isShoot ? 'e.g. stench at [1,2] and no stench at [2,1], so the Wumpus is not in [2,2]; [1,1] is visited, so it must be [1,3]' : isRetreat ? 'optional — retreating is free, but you can justify it for score' : 'e.g. no breeze and no stench at [1,1], so nothing dangerous is next to it, and ' + fmt(act.target) + ' is next to it';
+    openModal(`<h3>${title}</h3><p class="meta">You are at <b>${fmt(G.pos)}</b>. What you have sensed so far: ${hist}</p>${targetPick}
+      <label class="f">${isRetreat ? 'Your reason (optional)' : 'Your reason — cite what you sensed, at which square'}</label>
+      <textarea id="j-text" placeholder="${ph}"></textarea>
+      <div class="row" style="margin-top:.6rem"><button class="primary" id="j-submit">${isRetreat ? 'Submit for scoring' : isShoot ? 'Shoot' : 'Submit & move'}</button>${isRetreat ? '<button id="j-skip">Retreat (free, no score)</button>' : ''}<button class="ghost" data-close>Cancel</button></div>
+      <div id="j-verdict"></div>`);
+    $('#j-text').focus();
+    if (isRetreat) $('#j-skip').onclick = () => { closeModal(); executeMove(act.target, false); };
+    $('#j-submit').onclick = async () => {
+      const text = $('#j-text').value.trim();
+      if (!text && !isRetreat) return toast('Type a reason first — that is the whole game.');
+      if (!text && isRetreat) { closeModal(); executeMove(act.target, false); return; }
+      if (isShoot) act.target = W.parseKey($('#j-target').value);
+      $('#j-submit').disabled = true; if ($('#j-skip')) $('#j-skip').disabled = true;
+      $('#j-verdict').innerHTML = `<div class="verdict"><span class="spinner"></span> judging your reasoning…</div>`;
+      const req = {
+        action: act.action, target_square: act.target, current_square: G.pos.slice(), move_number: G.moveNumber + 1,
+        percept_history: distinctHistory(),
+        visited: G.visited.map((v) => v.slice()), student_flags: flagForJudge(), justification: text, start_square: G.world.start.slice(),
+      };
+      const res = await judge(req);
+      if (act.retryOf) undoAttempt(act.retryOf); else G.moveNumber++;
+      act.retryOf = null;
+      act.lastReq = req; act.lastRes = res; act.lastText = text;
+      recordVerdict(act, text, res, act.attempt || 1);
+      showVerdict(res, act);
+    };
+  }
+
+  // A rewritten reason replaces the earlier attempt: its score comes off, its log entry stays greyed as "attempt n".
+  function undoAttempt(t) {
+    const v = t.verdict;
+    if (G.kb) G.kb = G.kb.filter((s) => !(s.src === 'move' && s.move === t.n));
+    G.reasoning.total -= v.total; G.reasoning.max -= v.max;
+    for (const k of ['R1', 'R2', 'R3', 'R4']) if (v.scores[k] !== null) { G.dimSum[k][0] -= v.scores[k]; G.dimSum[k][1]--; }
+    t.retried = true;
+    if (t.el) { t.el.classList.add('retried'); t.el.querySelector('.att') && (t.el.querySelector('.att').textContent = 'attempt ' + t.attempt + ' — rewritten, not counted'); }
+    G.transcript = G.transcript.filter((x) => x !== t);
+  }
+
+  function showVerdict(res, act) {
+    const v = res.verdict; const s = v.scores;
+    const dim = (k) => dimChip(k, s[k]);
+    $('#j-verdict').innerHTML = `<div class="verdict"><span class="big verdict-${v.verdict}">${v.total} / ${v.max}</span> <span class="verdict-${v.verdict}">${v.verdict}</span> <span class="badge judge" style="float:right">${res.judgeLabel}</span>
+      <div class="dims">${dim('R1')}${dim('R2')}${dim('R3')}${dim('R4')}</div>
+      ${missingHtml(v)}
+      <div class="coach">${escapeHtml(v.coaching)}</div>${v.formal ? `<div class="formal" style="margin-top:.3rem">${escapeHtml(v.formal)}</div>` : ''}
+      ${derivationHtml(act.lastReq)}
+      <div class="legend">One point each: R1 you cite a real percept at a square you visited · R2 the conclusion follows by the adjacency rule · R3 you combine two observations (n/a on the first move) · R4 your certainty matches what you proved. <a href="#" id="j-how" style="color:var(--accent2)">full explanation</a></div>
+      ${v.flags_wrong && v.flags_wrong.length ? `<div style="font-size:.8rem;color:var(--danger);margin-top:.3rem">🟢 SAFE flag not proved: ${v.flags_wrong.map((f) => '[' + f + ']').join(', ')}</div>` : ''}
+      <div id="j-explain-box"></div>
+      <div class="row" style="margin-top:.6rem"><button class="primary" id="j-go">${act.action === 'shoot' ? 'Fire!' : 'Move to ' + fmt(act.target)}</button><button id="j-explain">💡 Explain</button><button class="ghost" id="j-rewrite">✏️ Rewrite my reason</button></div></div>`;
+    const jt = $('#j-text'); if (jt) jt.readOnly = true;
+    const row = $('#j-submit') && $('#j-submit').parentElement; if (row) row.classList.add('hidden');
+    $('#j-go').onclick = () => { closeModal(); if (act.action === 'shoot') executeShoot(act); else executeMove(act.target, true); };
+    $('#j-explain').onclick = () => explainCurrent(act);
+    $('#j-rewrite').onclick = () => {
+      // back to the text box, same position, same target; the earlier attempt's score is removed when the new one is judged
+      act.retryOf = G.transcript[G.transcript.length - 1] && G.transcript[G.transcript.length - 1].act === act ? G.transcript[G.transcript.length - 1] : null;
+      act.attempt = (act.attempt || 1) + 1;
+      $('#j-verdict').innerHTML = '';
+      if (jt) { jt.readOnly = false; jt.focus(); }
+      if (row) row.classList.remove('hidden');
+      $('#j-submit').disabled = false; if ($('#j-skip')) $('#j-skip').disabled = false;
+      toast('Rewrite your reason and submit again. The earlier attempt will not count.', 3000);
+    };
+  }
+
+  const canAI = () => settings.judgeMode !== 'local' && (serverInfo.lecturer || settings.nvKey || (serverInfo.available && serverInfo.mode === 'open') || (serverInfo.mode === 'code' && settings.lecturerCode));
+
+  // The tutor is grounded: the rule engine's facts + the game log go with every request, so the AI explains rather than re-derives.
+  // Compare what the tutor says about named squares with what the rule engine has proved. Returns correction lines.
+  function factCheckTutor(text, req) {
+    const K = W.knowledge(req.percept_history || [], req.visited || []);
+    const out = []; const seen = new Set();
+    const re = /[\[\(]\s*([1-4])\s*,\s*([1-4])\s*[\]\)]/g; let m;
+    const low = text.toLowerCase();
+    while ((m = re.exec(text))) {
+      const sq = [Number(m[1]), Number(m[2])], k = key(sq); if (seen.has(k)) continue; seen.add(k);
+      const st = K[k]; if (!st) continue;
+      // look at the sentence the square sits in
+      const start = low.lastIndexOf('.', m.index) + 1; const end = low.indexOf('.', m.index); const sent = low.slice(start, end < 0 ? undefined : end);
+      const saysUnknown = /cannot conclude|can't conclude|nothing (is )?known|unknown|not (yet )?(proved|proven|certain|safe)|no percepts? rule|might (still )?(have|contain|be)|could (still )?(have|contain|be)|possible|uncertain|not sure/.test(sent);
+      const saysSafe = /\b(is|are) safe\b|proved safe|no pit and no wumpus/.test(sent) && !/not (proved )?safe|isn't safe|cannot conclude/.test(sent);
+      if (st.safe && saysUnknown && !saysSafe) out.push(`${fmt(sq)} is in fact proved safe: ${proofWhy(sq, req)}.`);
+      if (!st.safe && st.pit !== 'yes' && st.wumpus !== 'yes' && saysSafe && !st.visited) out.push(`${fmt(sq)} is not proved safe by your percepts (a ${st.pit === 'maybe' ? 'pit' : 'Wumpus'} is still possible there).`);
+      if (st.pit === 'yes' && /no pit|not a pit|pit-free/.test(sent)) out.push(`${fmt(sq)} is in fact proved to hold a pit.`);
+      if (st.wumpus === 'yes' && /no wumpus|not the wumpus/.test(sent)) out.push(`${fmt(sq)} is in fact proved to hold the Wumpus.`);
+    }
+    return out;
+  }
+  // Remove each sentence that contradicts a proved fact and put the engine's sentence there instead.
+  function spliceCorrections(text, corrections, req) {
+    const K = W.knowledge(req.percept_history || [], req.visited || []);
+    const sentences = text.split(/(?<=[.!?])\s+/);
+    const out = []; const done = new Set();
+    for (const sen of sentences) {
+      const low = sen.toLowerCase(); let replaced = false;
+      const re = /[\[\(]\s*([1-4])\s*,\s*([1-4])\s*[\]\)]/g; let m;
+      while ((m = re.exec(sen))) {
+        const sq = [Number(m[1]), Number(m[2])]; const st = K[key(sq)]; if (!st) continue;
+        const saysUnknown = /cannot conclude|can't conclude|nothing (is )?known|unknown|not (yet )?(proved|proven|certain|safe)|no percepts? rule|might (still )?(have|contain|be)|could (still )?(have|contain|be)|possible|uncertain|not sure/.test(low);
+        const saysSafe = /\b(is|are) safe\b|proved safe|no pit and no wumpus/.test(low) && !/not (proved )?safe|isn't safe|cannot conclude/.test(low);
+        if (st.safe && saysUnknown && !saysSafe) { out.push(`${fmt(sq)} is also proved safe: ${proofWhy(sq, req)}.`); done.add(fmt(sq)); replaced = true; break; }
+        if (!st.safe && st.pit !== 'yes' && st.wumpus !== 'yes' && saysSafe && !st.visited) { out.push(`${fmt(sq)} is not proved safe: a ${st.pit === 'maybe' ? 'pit' : 'Wumpus'} is still possible there, so treat it as a risk.`); done.add(fmt(sq)); replaced = true; break; }
+      }
+      if (!replaced) out.push(sen);
+    }
+    // squares the engine proved safe that the text called unknown but that were not caught sentence-wise
+    for (const c of corrections) { const sq = (c.match(/\[\d,\d\]/) || [''])[0]; if (sq && !done.has(sq)) { out.push(c); done.add(sq); } }
+    return out.join(' ');
+  }
+  function proofWhy(sq, req) {
+    const parts = [];
+    for (const h of req.percept_history || []) if (W.adjacent(h.square, sq)) { if (!h.percepts.includes('breeze')) parts.push('no breeze at ' + fmt(h.square) + ' rules out a pit'); if (!h.percepts.includes('stench')) parts.push('no stench at ' + fmt(h.square) + ' rules out the Wumpus'); }
+    return parts.length ? parts.join('; ') : 'by the rule engine';
+  }
+
+  // One tutor round trip (no bookkeeping). opts: {question, style, chat}
+  async function tutorCall(t, opts) {
+    const req = t.req, res = { verdict: t.verdict };
+    const facts = W.explainVerdict(req, res.verdict);
+    const tell = W.kbPercepts(req.percept_history);
+    facts.push('KNOWLEDGE BASE (percept sentences, numbered): ' + tell.map((x, i) => (i + 1) + '. ' + x.text).join('; ') + '.');
+    if ((G.kb || []).length) facts.push('STUDENT\'S DERIVED SENTENCES so far, with the engine\'s check: ' + G.kb.map((x, i) => (tell.length + i + 1) + '. ' + W.sentenceText(x) + ' [' + kbStatus(x) + ']').join('; ') + '.');
+    const transcript = G.transcript.filter((x) => !x.retried).slice(-10).map((x) => ({ n: x.n, target: x.target, text: x.text, scores: x.verdict.scores, verdict: x.verdict.verdict }));
+    const body = Object.assign({ explain: true, verdict: res.verdict, facts, transcript, chat: (opts.chat || []).slice(-4), question: opts.question || undefined, style: opts.style || undefined,
+      access_code: settings.lecturerCode || undefined, user_key: (!serverInfo.lecturer && settings.nvKey) || undefined }, req); delete body.start_square;
+    const r = await withTimeout(fetch('judge.php', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }), 45000);
+    const j = await r.json();
+    if (!j.ok) throw new Error(j.detail || j.reason || 'error');
+    return j;
+  }
+
+  // Verify-and-repair: the rule engine checks the draft; contradictions go back to the model with the facts; up to 2 rewrites.
+  async function askTutor(t, opts) {
+    const req = t.req;
+    const prior = (t.chat || []).map((c) => ({ q: c.q, a: c.a }));
+    let j = await tutorCall(t, { question: opts.question, style: opts.style, chat: prior });
+    let corrections = factCheckTutor(String(j.text), req); let revised = 0;
+    for (let round = 0; round < 2 && corrections.length; round++) {
+      const draft = String(j.text);
+      const repairQ = 'Your previous explanation contradicted the FACTS. Correct these statements: ' + corrections.join(' ') + ' Rewrite the WHOLE explanation' + (opts.question ? ' (answering the same question)' : '') + ' so that it states these facts correctly and agrees with every FACT; keep the same length and tone; do not mention that you are correcting yourself or the rule engine. Output only the rewritten explanation.';
+      try { const j2 = await tutorCall(t, { question: repairQ, chat: prior.concat([{ q: opts.question || '(explain)', a: draft }]) }); j = j2; revised++; corrections = factCheckTutor(String(j.text), req); } catch (e) { break; }
+    }
+    if (corrections.length) { // the model could not (or was not reachable to) fix it: replace the wrong sentences with the engine's, in the tutor's voice
+      j.text = spliceCorrections(String(j.text), corrections, req); revised++; corrections = factCheckTutor(String(j.text), req);
+    }
+    j.corrections = corrections; j.revised = revised;
+    const last = (t.chat || []).slice(-1)[0];
+    if (last && last.a.trim() === String(j.text).trim()) throw new Error('the tutor repeated its previous answer — try a different question');
+    t.chat = (t.chat || []).concat([{ q: opts.question || (opts.style === 'different' ? '(explain differently)' : '(explain)'), a: j.text, c: corrections, r: revised }]);
+    if (t.el) { const b = t.el.querySelector('button'); if (b) b.textContent = '💡 Explain this move (' + t.chat.length + ' tutor turn' + (t.chat.length > 1 ? 's' : '') + ')'; }
+    saveGame();
+    return j;
+  }
+  function explainCurrent(act) { const box = $('#j-explain-box'); if (box && act.t) renderExplain(box, act.t); if ($('#j-explain')) $('#j-explain').disabled = true; }
+
+  // Explain any move, live or from the log: local facts, then the AI tutor thread for that move
+  function renderExplain(box, t) {
+    const req = t.req, res = { verdict: t.verdict };
+    if (!req) { box.innerHTML = '<div class="meta">No stored context for this move (played before this feature existed).</div>'; return; }
+    const local = W.explainVerdict(req, res.verdict);
+    box.innerHTML = `<div class="explain"><details open><summary style="cursor:pointer"><b>💡 What this verdict means</b> <span class="meta">(rule engine)</span></summary>${local.map((l) => `<p>${escapeHtml(l)}</p>`).join('')}</details>
+      <div id="j-thread"></div><div id="j-ai-explain" class="meta"></div>
+      <div id="j-ask" class="row hidden" style="margin-top:.5rem;flex-wrap:nowrap"><input type="text" id="j-q" placeholder="Ask the tutor a follow-up…" maxlength="300" style="flex:1"><button class="small" id="j-q-go">Ask</button><button class="small ghost" id="j-again" title="A fresh explanation from a different angle">↻</button></div></div>`;
+    const ai = $('#j-ai-explain');
+    if (!canAI()) { ai.innerHTML = serverInfo.mode === 'byok' && !serverInfo.lecturer ? 'Add your NVIDIA key in ⚙ settings and the AI tutor can explain this in its own words and answer follow-up questions.' : ''; return; }
+    const thread = $('#j-thread');
+    const show = (q, a, model, c, r) => { const d = document.createElement('div'); d.className = 'turn'; const mark = (c && c.length) ? '' : `<span class="badge" style="font-size:.65rem;border-color:var(--success);color:var(--success)" title="Every square this answer mentions agrees with what your percepts prove${r ? ' (the tutor revised its draft ' + r + '× after the engine\'s check)' : ''}">✓ checked by the rule engine${r ? ' · revised' : ''}</span>`; d.innerHTML = (q && !q.startsWith('(') ? `<div class="q-you">You: ${escapeHtml(q)}</div>` : '') + `<b style="color:var(--accent2)">AI tutor</b> <span class="badge" style="font-size:.65rem">${escapeHtml((model || '').split('/').pop())}</span> ${mark}<p style="margin:.3rem 0 0;color:var(--text)">${escapeHtml(a)}</p>` + ((c && c.length) ? `<div class="correction">⚠ The tutor still disagrees with the rule engine after rewriting. Trust this: ${c.map(escapeHtml).join(' ')}</div>` : ''); thread.appendChild(d); d.scrollIntoView({ block: 'nearest' }); };
+    const run = async (opts) => {
+      ai.innerHTML = '<span class="spinner"></span> asking the AI tutor (the rule engine checks the answer before you see it)…'; $('#j-ask').classList.add('hidden');
+      try { const j = await askTutor(t, opts); ai.innerHTML = ''; show(opts.question, j.text, j.model, j.corrections, j.revised); }
+      catch (e) { ai.innerHTML = '<span style="color:var(--text-dim)">AI tutor unavailable (' + escapeHtml(e.message) + ').</span>'; }
+      $('#j-ask').classList.remove('hidden');
+    };
+    for (const c of (t.chat || [])) show(c.q, c.a, '', c.c, c.r);
+    $('#j-q-go').onclick = () => { const q = $('#j-q').value.trim(); if (!q) return; $('#j-q').value = ''; run({ question: q }); };
+    $('#j-q').onkeydown = (e) => { if (e.key === 'Enter') $('#j-q-go').click(); };
+    $('#j-again').onclick = () => run({ style: 'different' });
+    if (!(t.chat || []).length) run({}); else $('#j-ask').classList.remove('hidden');
+  }
+
+  // From the log: reopen a past move — board squares light up, and the full explanation thread is available again
+  function openPastMove(t) {
+    const s = t.verdict.scores;
+    openModal(`<h3>Move #${t.n} ${t.action === 'shoot' ? '🏹 shoot at' : t.action === 'retreat' ? '↩ retreat to' : '→'} ${fmt(t.target)}</h3>
+      <p class="meta">You were at <b>${fmt(t.from)}</b>. The board highlights that square (blue) and the target (gold) while this is open.</p>
+      <div class="entry"><div class="q">“${escapeHtml(t.text)}”</div><div class="dims">${dimChip('R1', s.R1)}${dimChip('R2', s.R2)}${dimChip('R3', s.R3)}${dimChip('R4', s.R4)}</div>${missingHtml(t.verdict)}<div class="coach">${escapeHtml(t.verdict.coaching)}</div>${t.verdict.formal ? `<div class="formal">${escapeHtml(t.verdict.formal)}</div>` : ''}${t.req ? derivationHtml(t.req) : ''}</div>
+      <div id="j-explain-box"></div>
+      <div class="row" style="margin-top:.6rem"><button class="primary" data-close>Close</button></div>`);
+    // highlight after openModal (which clears any earlier highlight)
+    const cellAt = (sq) => document.querySelectorAll('#board .cell')[(4 - sq[1]) * 4 + (sq[0] - 1)];
+    if (t.from) cellAt(t.from).classList.add('replay-from'); if (t.target) cellAt(t.target).classList.add('replay-to');
+    renderExplain($('#j-explain-box'), t);
+  }
+
+  // ---------- autosave / resume (this browser only; survives reloads and dropped connections) ----------
+  const SAVE = 'wumpus-justify-game';
+  function saveGame() {
+    if (!G) return;
+    try {
+      const t = G.transcript.map((x) => ({ n: x.n, action: x.action, target: x.target, from: x.from, text: x.text, verdict: x.verdict, judge: x.judge, judgeLabel: x.judgeLabel, model: x.model, attempt: x.attempt, retried: !!x.retried, chat: x.chat || [], req: x.req || null }));
+      const s = { v: 1, savedAt: Date.now(), worldId: G.world.id, seed: G.seed, kb: G.kb || [], pos: G.pos, visited: G.visited, history: G.history, flags: G.flags, flagLog: G.flagLog, arrows: G.arrows, hasGold: G.hasGold, alive: G.alive, over: G.over, outcome: G.outcome, wumpusAlive: G.wumpusAlive, moveNumber: G.moveNumber, transcript: t, reasoning: G.reasoning, dimSum: G.dimSum, moves: G.moves, revealed: G.revealed };
+      localStorage.setItem(SAVE, JSON.stringify(s));
+    } catch {}
+  }
+  function loadSaved() { try { const s = JSON.parse(localStorage.getItem(SAVE) || 'null'); if (!(s && s.v === 1 && !s.over)) return null; if (lockedCave && (s.worldId !== lockedCave.world || (lockedCave.world === 'random' && Number(s.seed) !== lockedCave.seed))) return null; return s; } catch { return null; } }
+  function resumeGame(s) {
+    const world = W.getWorld(s.worldId, s.seed);
+    G = Object.assign({ world, seed: s.seed }, s, { world, transcript: [] });
+    delete G.v; delete G.savedAt; delete G.worldId;
+    $('#start').classList.add('hidden'); $('#play').classList.remove('hidden');
+    $('#b-world').textContent = 'world: ' + (world.id === 'random' ? 'random · seed ' + s.seed : world.name);
+    $('#log').innerHTML = '';
+    for (const x of s.transcript) { const t = Object.assign({}, x, { act: null, chat: x.chat || [], req: x.req || null }); G.transcript.push(t); appendLogEntry(t); if (x.retried) { t.el.classList.add('retried'); t.el.querySelector('.att').textContent = 'attempt ' + t.attempt + ' — rewritten, not counted'; } }
+    G.transcript = G.transcript.filter((t) => !t.retried);
+    flagMode = false; $('#btn-flag').classList.remove('on');
+    render(); toast('Resumed your game.', 2000);
+  }
+  // ---------- export / import the whole game (autosave format) ----------
+  function exportGame() {
+    const raw = (() => { try { return localStorage.getItem(SAVE); } catch { return null; } })();
+    if (!raw) return toast('Nothing to export yet.');
+    const blob = new Blob([raw], { type: 'application/json' }); const s = JSON.parse(raw);
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `wumpus-game-${s.worldId}${s.worldId === 'random' ? '-' + s.seed : ''}-${new Date().toISOString().slice(0, 10)}.json`; document.body.appendChild(a); a.click(); a.remove();
+    toast('Game exported. Import it from the start screen on any device to continue.', 3500);
+  }
+  function importGame(file) {
+    const rd = new FileReader();
+    rd.onload = () => {
+      let s; try { s = JSON.parse(String(rd.result)); } catch { return toast('That file is not a Wumpus Justify game.'); }
+      if (!s || s.v !== 1 || !s.history || !s.pos) return toast('That file is not a Wumpus Justify game.');
+      if (lockedCave && (s.worldId !== lockedCave.world || (lockedCave.world === 'random' && Number(s.seed) !== lockedCave.seed))) return toast('Your lecturer has pinned a different cave for this class, so this game cannot be continued here.', 4500);
+      if (s.over) return toast('That game is already finished.');
+      try { localStorage.setItem(SAVE, JSON.stringify(s)); } catch {}
+      closeModal(); resumeGame(s);
+    };
+    rd.readAsText(file);
+  }
+  $('#import-file').onchange = (e) => { const f = e.target.files && e.target.files[0]; if (f) importGame(f); e.target.value = ''; };
+  $('#btn-export-start').onclick = exportGame; $('#btn-export').onclick = exportGame;
+  function renderResume() {
+    const s = loadSaved(); const b = $('#btn-resume'); if (!b) return;
+    $('#btn-export-start').classList.toggle('hidden', !s);
+    if (!s) { b.classList.add('hidden'); return; }
+    b.classList.remove('hidden'); b.textContent = `▶ Resume (${s.worldId === 'random' ? 'seed ' + s.seed : s.worldId}, ${s.moves} moves, ${s.reasoning.total}/${s.reasoning.max})`;
+    b.onclick = () => resumeGame(loadSaved());
+  }
+
+  function recordVerdict(act, text, res, attempt) {
+    const v = res.verdict;
+    G.reasoning.total += v.total; G.reasoning.max += v.max;
+    for (const k of ['R1', 'R2', 'R3', 'R4']) if (v.scores[k] !== null) { G.dimSum[k][0] += v.scores[k]; G.dimSum[k][1]++; }
+    const t = { n: G.moveNumber, action: act.action, target: act.target, from: G.pos.slice(), text, verdict: v, judge: res.judge, judgeLabel: res.judgeLabel, model: res.model || null, attempt: attempt || 1, act, req: act.lastReq, chat: [] };
+    act.t = t;
+    G.transcript.push(t);
+    // the claims in this sentence (extracted by the rule engine whichever judge scored it) become KB entries
+    try { const lj = res.raw || W.localJudge(act.lastReq); for (const c of (lj.claims || [])) kbAdd(c, 'move'); } catch {}
+    render();
+    appendLogEntry(t);
+    saveGame();
+  }
+
+  function appendLogEntry(t) {
+    const v = t.verdict, s = v.scores, attempt = t.attempt || 1;
+    const dim = (k) => dimChip(k, s[k]);
+    const entry = document.createElement('div'); entry.className = 'entry';
+    entry.innerHTML = `<div><b>#${t.n}</b> ${t.action === 'shoot' ? '🏹 shoot at' : t.action === 'retreat' ? '↩ retreat to' : '→'} ${fmt(t.target)} · <span class="verdict-${v.verdict}">${v.total}/${v.max} ${v.verdict}</span> <span class="badge" style="font-size:.65rem">${t.judgeLabel}</span>${attempt > 1 ? ` <span class="badge att" style="font-size:.65rem">attempt ${attempt}</span>` : ' <span class="badge att hidden" style="font-size:.65rem"></span>'}</div>
+      <div class="q">“${escapeHtml(t.text)}”</div><div class="dims">${dim('R1')}${dim('R2')}${dim('R3')}${dim('R4')}</div>${missingHtml(v)}<div class="coach">${escapeHtml(v.coaching)}</div>${v.formal ? `<div class="formal">${escapeHtml(v.formal)}</div>` : ''}`;
+    const log = $('#log'); if (log.firstChild && log.firstChild.textContent.startsWith('Nothing yet')) log.innerHTML = '';
+    const b = document.createElement('button'); b.className = 'small ghost'; b.style.marginTop = '.4rem'; b.textContent = '💡 Explain this move' + ((t.chat || []).length ? ' (' + t.chat.length + ' tutor turn' + (t.chat.length > 1 ? 's' : '') + ')' : '');
+    b.onclick = () => openPastMove(t);
+    entry.appendChild(b);
+    t.el = entry;
+    log.prepend(entry);
+  }
+
+  function executeMove(target, judged) {
+    G.pos = target.slice(); G.moves++;
+    const w = G.world;
+    if (!isVisited(target)) G.visited.push(target.slice());
+    const died = w.pits.some((p) => eq(p, target)) || (G.wumpusAlive && eq(target, w.wumpus));
+    if (died) {
+      G.history.push({ square: target.slice(), percepts: [] });
+      endGame(w.pits.some((p) => eq(p, target)) ? 'fell into a pit at ' + fmt(target) : 'eaten by the Wumpus at ' + fmt(target), false);
+      return;
+    }
+    const ps = W.perceptsAt(target, w);
+    G.history.push({ square: target.slice(), percepts: ps });
+    if (ps.includes('glitter') && !G.hasGold) { G.hasGold = true; toast('✨ Glitter! You grabbed the gold. Now get back to [1,1] and climb out.', 3500); }
+    delete G.flags[key(target)];
+    render();
+  }
+
+  function executeShoot(act) {
+    G.arrows = 0;
+    const hit = G.wumpusAlive && act.path.some((s) => eq(s, G.world.wumpus));
+    if (hit) { G.wumpusAlive = false; G.history[G.history.length - 1].percepts.push('scream'); toast('😱 SCREAM! The Wumpus is dead. You heard it from everywhere.', 3500); }
+    else toast('…silence. The arrow is gone. The Wumpus is not in that line.', 3000);
+    render();
+  }
+
+  function endGame(outcome, ok) {
+    G.over = true; G.alive = ok || outcome.startsWith('climbed'); G.outcome = outcome; G.revealed = true;
+    render();
+    const dims = ['R1', 'R2', 'R3', 'R4'].map((k) => `${k}: ${G.dimSum[k][1] ? Math.round(100 * G.dimSum[k][0] / G.dimSum[k][1]) + '%' : 'n/a'}`).join(' · ');
+    openModal(`<h3>${ok ? '🏆' : G.alive ? '🚪' : '☠️'} ${escapeHtml(outcome)}</h3>
+      <p><b>Reasoning score: ${G.reasoning.total} / ${G.reasoning.max}</b> — this is the number that matters.<br><span class="meta">${dims}</span></p>
+      <p class="meta">Survival: ${G.moves} moves · ${G.hasGold ? 'gold retrieved' : 'no gold'} · the whole cave is now shown on the board. Did any square you avoided turn out empty? Sound reasoning and true conclusions are different things.</p>
+      <div class="row"><button class="primary" id="e-reveal">Reveal: what you actually did</button><button data-close>Look at the board</button><button class="ghost" id="e-new">New game</button></div>`);
+    $('#e-reveal').onclick = openReveal; $('#e-new').onclick = () => { closeModal(); $('#btn-new').click(); };
+  }
+
+  function openReveal() {
+    const rows = G.transcript.map((t) => `<tr><td><b>#${t.n}</b> ${t.action === 'shoot' ? '🏹' : t.action === 'retreat' ? '↩' : '→'} ${fmt(t.target)}<br><span class="q">“${escapeHtml(t.text)}”</span></td><td class="f">${escapeHtml(t.verdict.formal || '—')}${t.verdict.rule ? `<br><span style="color:var(--text-dim)">${escapeHtml(t.verdict.rule)}</span>` : ''}<br><span style="color:var(--text-dim)">${t.verdict.total}/${t.verdict.max}</span></td></tr>`).join('');
+    openModal(`<h3>🔍 What you wrote — and what logicians write</h3>
+      ${G.transcript.length ? `<table class="reveal-table"><tr><th>What you wrote</th><th>In propositional logic</th></tr>${rows}</table>` : '<p class="meta">No justified moves yet.</p>'}
+      <div class="closing">You just used <b>Modus Ponens</b>, <b>Modus Tollens</b>, <b>Resolution</b>, and the idea of a <b>model</b>. You did it in English, without being taught any of it.<br><br>A computer cannot read your English. For the rest of Module 3 we build the machinery that lets it do exactly what you just did — <b>and prove it never makes a mistake you wouldn't.</b></div>
+      <div class="row" style="margin-top:.6rem"><button class="primary" data-close>Back</button><button id="r-export">⬇ export transcript (JSON)</button></div>`);
+    $('#r-export').onclick = exportTranscript;
+  }
+
+  function exportTranscript() {
+    const data = { game: 'wumpus-justify', version: 1, world: G.world.id, seed: G.world.id === 'random' ? Number($('#seed').value) : null, exported: new Date().toISOString(), outcome: G.outcome || 'in progress', reasoning: G.reasoning, moves: G.moves, gold: G.hasGold, flagLog: G.flagLog, transcript: G.transcript, percept_history: G.history };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `wumpus-${G.world.id}-${Date.now()}.json`; document.body.appendChild(a); a.click(); a.remove();
+  }
+
+  function openSettings() {
+    openModal(`<h3>⚙ Settings</h3>
+      <label class="f">Coach</label><select id="s-mode"><option value="auto" ${settings.judgeMode === 'auto' ? 'selected' : ''}>auto — instant local rules; AI only when the rules can't read your sentence</option><option value="llm" ${settings.judgeMode === 'llm' ? 'selected' : ''}>AI for every move (when available; slower)</option><option value="local" ${settings.judgeMode === 'local' ? 'selected' : ''}>local rules only (instant, offline)</option></select>
+      ${serverInfo.lecturer ? `<p class="meta" style="color:var(--success)">Signed in as lecturer — this browser uses the embedded AI key. <a href="lecturer/" style="color:var(--accent2)">sign out</a></p>` : `
+      <label class="f">Your NVIDIA API key (free — see below). Sent only to this site's judge, used per move, never stored.</label>
+      <div class="row" style="flex-wrap:nowrap"><input type="password" id="s-nvkey" value="${escapeHtml(settings.nvKey)}" placeholder="nvapi-…" autocomplete="off" style="flex:1"><button class="small" id="s-nvtest" type="button">Test key</button></div>
+      <div id="s-nvresult" class="meta"></div>
+      <details style="margin-top:.4rem"><summary class="meta" style="cursor:pointer;color:var(--accent2)">How to get a free NVIDIA key (2 minutes)</summary>
+      <ol class="meta" style="padding-left:1.2rem;margin:.3rem 0">
+        <li>Go to <a href="https://build.nvidia.com/" target="_blank" rel="noopener" style="color:var(--accent2)">build.nvidia.com</a> and sign in (any email works).</li>
+        <li>Open any model page, click <b>Get API Key</b> (or go to your profile → API Keys → Generate).</li>
+        <li>Copy the key that starts with <code>nvapi-</code>, paste it above, press <b>Test key</b>, then Save.</li>
+      </ol>
+      <p class="meta">The model (${escapeHtml(serverInfo.nvidia_model || 'set by the lecturer')}) and grading settings are fixed by the course; your key only pays for your own moves.</p></details>
+      <label class="f">Lecturer code (if your teacher gave you one)</label><input type="text" id="s-code" value="${escapeHtml(settings.lecturerCode)}" autocomplete="off">
+      <p class="meta">Lecturer? <a href="lecturer/" style="color:var(--accent2)">Sign in here</a> to use the embedded key.</p>
+      <details><summary class="meta" style="cursor:pointer">Advanced: OpenRouter key (calls OpenRouter directly from this browser)</summary>
+      <label class="f">OpenRouter key</label><input type="password" id="s-byok" value="${escapeHtml(settings.byokKey)}" placeholder="sk-or-v1-…" autocomplete="off">
+      <label class="f">Model for that key</label><input type="text" id="s-byok-model" value="${escapeHtml(settings.byokModel)}" placeholder="${escapeHtml(serverInfo.byok_model || '')}"></details>`}
+      <p class="meta">Server AI coach: ${serverInfo.lecturer ? 'lecturer key' : serverInfo.mode === 'byok' ? 'your own NVIDIA key required' : serverInfo.available ? 'available (' + (serverInfo.provider || '') + ')' : 'not available right now'} · access: ${serverInfo.mode || '?'} · local rules always work.</p>
+      <div class="row" style="margin-top:.6rem"><button class="primary" id="s-save">Save</button><button class="ghost" data-close>Cancel</button></div>`);
+    $('#s-save').onclick = () => { settings.judgeMode = $('#s-mode').value; const g = (id) => ($(id) ? $(id).value.trim() : ''); settings.lecturerCode = g('#s-code'); settings.byokKey = g('#s-byok'); settings.byokModel = g('#s-byok-model'); if ($('#s-nvkey')) { const nk = g('#s-nvkey'); if (nk !== settings.nvKey) settings.nvKeyStatus = null; settings.nvKey = nk; } saveSettings(); updateJudgeBadge(); closeModal(); toast('Settings saved'); verifyKeyQuietly(); };
+    if ($('#s-nvtest')) $('#s-nvtest').onclick = async () => {
+      const k = $('#s-nvkey').value.trim(); const out = $('#s-nvresult');
+      if (!/^nvapi-/.test(k)) { out.textContent = 'A NVIDIA key starts with nvapi-'; return; }
+      out.innerHTML = '<span class="spinner"></span> testing…';
+      try {
+        const r = await withTimeout(fetch('judge.php', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ test_key: k }) }), 45000);
+        const j = await r.json();
+        out.innerHTML = j.ok ? `<span style="color:var(--success)">✓ key works — ${escapeHtml(j.model || '')} answered in ${(j.ms / 1000).toFixed(1)} s. Press Save.</span>` : `<span style="color:var(--danger)">✗ ${escapeHtml(j.error || j.detail || j.reason || 'failed')}</span>`;
+        settings.nvKey = k; setKeyStatus(!!j.ok, { model: j.model, error: j.ok ? '' : (j.error || j.detail || j.reason || '') });
+      } catch (e) { out.innerHTML = '<span style="color:var(--danger)">✗ ' + escapeHtml(e.message) + '</span>'; }
+    };
+  }
+
+  // ---------- judging ----------
+  function withTimeout(p, ms) { return Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))]); }
+  function tally(which) { try { fetch('judge.php', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tally: which }), keepalive: true }).catch(() => {}); } catch {} }
+
+  async function judge(req) {
+    const local = () => { const v = W.localJudge(req); tally('local'); return { verdict: Object.assign(W.normaliseVerdict(v, req), { rule: v.rule, missing: v.missing }), judge: 'local', judgeLabel: 'local rules', raw: v }; };
+    if (settings.judgeMode === 'local') return local();
+    if (settings.judgeMode !== 'llm') {
+      // auto: the rule engine answers instantly; the AI is consulted only when the rules could not read the sentence
+      const l = local();
+      const unread = l.verdict.scores.R1 === 0 && !(l.raw._debug && l.raw._debug.invented && l.raw._debug.invented.length);
+      if (!unread) return l;
+      const ai = await judgeAI(req);
+      return ai || l;
+    }
+    return (await judgeAI(req)) || local();
+  }
+  async function judgeAI(req) {
+    const serverReq = Object.assign({}, req); delete serverReq.start_square;
+    if (settings.byokKey && PROMPT) {
+      try {
+        const v = await withTimeout(byokJudge(serverReq), 30000);
+        if (v) { tally('byok'); return { verdict: v, judge: 'byok', judgeLabel: 'AI · your key' }; }
+      } catch (e) { console.warn('byok failed', e); }
+    }
+    try {
+      const r = await withTimeout(fetch('judge.php', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({ access_code: settings.lecturerCode || undefined, user_key: (!serverInfo.lecturer && settings.nvKey) || undefined }, serverReq)) }), 32000);
+      const j = await r.json();
+      if (j.ok && j.verdict) { if (j.provider === 'byok') setKeyStatus(true, { model: j.model }); const v = W.normaliseVerdict(j.verdict, req); if (v) return { verdict: v, judge: 'llm', judgeLabel: 'AI · ' + (j.label || j.provider).replace(/\s*\(.*\)$/, ''), model: j.model }; }
+      else {
+        console.info('server judge unavailable:', j.reason, j.detail || j.tried || '');
+        if (j.reason === 'key-rejected') setKeyStatus(false, { error: j.detail || 'rejected' });
+        if (j.reason === 'need-key' && !nudged) { nudged = true; toast('Add your own NVIDIA key in ⚙ settings to get the AI coach. Local rules are judging meanwhile.', 4500); }
+        if (j.reason === 'key-rejected') toast('NVIDIA rejected your key — check it in ⚙ settings.', 4000);
+        if (j.reason === 'key-rate-limited') toast('Your NVIDIA key is rate-limited right now; local rules judged this one.', 4000);
+      }
+    } catch (e) { console.warn('server judge failed', e); }
+    return null;
+  }
+
+  async function byokJudge(req) {
+    const model = settings.byokModel || serverInfo.byok_model || 'nvidia/nemotron-3-super-120b-a12b:free';
+    const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + settings.byokKey, 'HTTP-Referer': location.origin, 'X-Title': 'Wumpus Justify (PECST522)' },
+      body: JSON.stringify({ model, temperature: 0.2, max_tokens: 900, response_format: { type: 'json_object' }, messages: [{ role: 'system', content: PROMPT }, { role: 'user', content: JSON.stringify(req, null, 2) }] }),
+    });
+    if (!r.ok) throw new Error('openrouter http ' + r.status);
+    const j = await r.json();
+    let content = j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content;
+    if (!content) throw new Error('empty');
+    let parsed = null;
+    try { parsed = JSON.parse(content); } catch { const m = content.match(/\{[\s\S]*\}/); if (m) { try { parsed = JSON.parse(m[0]); } catch {} } }
+    return parsed ? W.normaliseVerdict(parsed, req) : null;
+  }
+
+  const DIM_NAMES = { R1: 'evidence', R2: 'valid step', R3: 'combine', R4: 'certainty' };
+  const DIM_LONG = { R1: 'Cites evidence', R2: 'Valid inference step', R3: 'Combines information', R4: 'Honest certainty' };
+  function dimChip(k, sc) { return `<span class="dim ${sc === null ? 'na' : sc ? 'y' : 'n'}" title="${DIM_LONG[k]}">${k} ${DIM_NAMES[k]} ${sc === null ? 'n/a' : sc ? '✓' : '×'}</span>`; }
+  function openHowScored() {
+    openModal(`<h3>How your reasoning is scored</h3>
+      <p class="meta">Every justified move gets up to four points. The move happens whatever you score; the points are for the <em>reason</em>, not the outcome. A lucky guess scores 0. Sound reasoning that walks into a pit scores full marks.</p>
+      <div class="how"><b>R1 · Cites evidence</b> — you name a specific percept, or its absence, at a specific square you have actually stood on. "No breeze at [1,1]" earns it. "It looks safe" does not. Inventing a percept that is not in your history scores 0 everywhere.</div>
+      <div class="how"><b>R2 · Valid inference step</b> — the conclusion follows from that percept and the adjacency rule (up, down, left, right; never diagonal). Classic miss: "no breeze, so it is safe" — no breeze rules out a pit only; you must also rule out the Wumpus (no stench).</div>
+      <div class="how"><b>R3 · Combines information</b> — you use two or more observations, or you eliminate a candidate using a square you already know is safe ("breeze at [2,1] means a pit in [1,1], [2,2] or [3,1]; [1,1] is where I stood, so [2,2] or [3,1]"). Not applicable on your first move, so it shows n/a.</div>
+      <div class="how"><b>R4 · Honest certainty</b> — your confidence matches your evidence: "safe" only for a proved square; "might", "could", "I accept the risk" for an unproved one. Over-claiming and under-claiming both lose the point.</div>
+      <p class="meta">Two scores are shown side by side and never added: <b>Reasoning</b> (these points) and <b>Survival</b> (alive, moves, gold). They measure different things.</p>
+      <div class="row" style="margin-top:.6rem"><button class="primary" data-close>Got it</button></div>`);
+  }
+  document.addEventListener('click', (e) => { if (e.target && e.target.id === 'j-how') { e.preventDefault(); openHowScored(); } });
+  // The machine's verdict on the target, from the student's percept sentences only: truth-table check + resolution proof.
+  function derivationHtml(req) {
+    const target = req.target_square; if (!target) return '';
+    const f = fmt(target);
+    const hist = req.percept_history || [];
+    const visited = (req.visited || []).some((v) => eq(v, target));
+    const shoot = req.action === 'shoot';
+    const sentence = shoot ? { kind: 'wumpus', squares: [target] } : { kind: 'safe', squares: [target] };
+    let a; try { a = L.ask(hist, sentence, { ttLimit: 1500000, maxSteps: 4000 }); } catch (e) { return ''; }
+    const tt = a.tt || {};
+    let headline, cls;
+    if (visited && !shoot) { headline = `${f} is entailed safe — you have stood on it`; cls = 'ok'; }
+    else if (a.status === 'entailed') { headline = shoot ? `KB ⊨ W${f}: the Wumpus is proved to be there` : `KB ⊨ safe ${f}: proved safe from what you sensed`; cls = 'ok'; }
+    else if (a.status === 'refuted') { headline = shoot ? `KB ⊨ ¬W${f}: the Wumpus is proved NOT to be there` : `KB ⊨ ¬safe ${f}: proved dangerous`; cls = 'bad'; }
+    else { headline = shoot ? `KB ⊭ W${f}: the Wumpus could be there, but it is not proved` : `KB ⊭ safe ${f}: not proved safe — a risk, whatever you wrote`; cls = 'open'; }
+    let detail = '';
+    if (tt.modelsOfKB) {
+      detail += `<div><b>Truth table.</b> Your percept sentences have <b>${tt.modelsOfKB}</b> model${tt.modelsOfKB === 1 ? '' : 's'} over ${tt.symbols} symbols. "${escapeHtml(L.sentenceText(sentence))}" is ${tt.entailed ? 'true in every one → <b>entailed</b>' : `false in ${tt.modelsWhereAlphaFalse} of them → <b>not entailed</b>`}.${tt.counterexample ? ` A world that fits everything you sensed where it fails: ${escapeHtml(tt.counterexample.filter((x) => /^[PW]/.test(x)).map(L.pretty).join(', ') || 'no pit or Wumpus nearby')}.` : ''}</div>`;
+    }
+    if (a.resolution && a.resolution.proved) detail += `<div style="margin-top:.3rem"><b>Resolution refutation</b> (assume the opposite, derive □):<ol class="proof">${a.resolution.steps.map((st) => `<li><code>${escapeHtml(st.text)}</code> <span class="meta">${escapeHtml(st.label)}</span></li>`).join('')}</ol></div>`;
+    else if (a.status === 'refuted') {
+      const neg = shoot ? { kind: 'noW', squares: [target] } : null;
+      let b = null; try { b = neg ? L.ask(hist, neg, { maxSteps: 4000 }) : null; } catch (e) {}
+      if (!neg) { for (const kind of ['pit', 'wumpus']) { try { const t2 = L.ask(hist, { kind, squares: [target] }, { maxSteps: 4000 }); if (t2.status === 'entailed' && t2.resolution.proved) { b = t2; break; } } catch (e) {} } }
+      if (b && b.resolution && b.resolution.proved) detail += `<div style="margin-top:.3rem"><b>Resolution refutation</b> of the opposite:<ol class="proof">${b.resolution.steps.map((st) => `<li><code>${escapeHtml(st.text)}</code> <span class="meta">${escapeHtml(st.label)}</span></li>`).join('')}</ol></div>`;
+    }
+    const id = 'der' + Math.random().toString(36).slice(2, 8);
+    return `<div class="deriv"><span class="${cls}">🧮 ${escapeHtml(headline)}</span> <a href="#" class="deriv-toggle" data-for="${id}" style="color:var(--accent2);font-size:.8rem">show derivation</a><div id="${id}" class="deriv-body hidden">${detail || '<span class="meta">No derivation available.</span>'}<div class="meta" style="margin-top:.3rem">Derived only from your percepts — the machine does not know where the pits or the Wumpus really are either.</div></div></div>`;
+  }
+  document.addEventListener('click', (e) => { const a = e.target.closest && e.target.closest('.deriv-toggle'); if (!a) return; e.preventDefault(); const b = document.getElementById(a.dataset.for); if (!b) return; b.classList.toggle('hidden'); a.textContent = b.classList.contains('hidden') ? 'show derivation' : 'hide derivation'; });
+  function missingHtml(v) {
+    const m = (v.missing || []).filter((x) => x && x.dim);
+    if (!m.length) return '';
+    return `<div class="missing"><b>Missing:</b> ${m.map((x) => `<span><b>${x.dim}</b> ${escapeHtml(x.name)}${x.why ? ' — ' + escapeHtml(x.why) : ''}</span>`).join('<br>')}</div>`;
+  }
+  function escapeHtml(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+
+  renderResume();
+  $('#start-how').onclick = (e) => { e.preventDefault(); openHowScored(); };
+  if (params.get('autostart') === '1') newGame();
+})();
+</script>
+<!-- ═══ delight:move-safe-reveal BEGIN ═══ -->
+<style>
+/* kind:reveal trigger:scroll-into-view target:.move-reason[data-safe] */
+@keyframes fade-drift-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } } .move-reason[data-safe] { opacity: 0; transform: translateY(8px); animation: fade-drift-in 400ms cubic-bezier(0.2, 0, 0.2, 1) forwards; } @media (prefers-reduced-motion: reduce) { .move-reason[data-safe] { opacity: 1; transform: none; animation: none; } }
+</style>
+<script>
+(function(){
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const observer = new IntersectionObserver((entries) => { entries.forEach(entry => { if (entry.isIntersecting) entry.target.style.animationPlayState = 'running'; }); }, { threshold: 0.1 }); document.querySelectorAll('.move-reason[data-safe]').forEach(el => { el.style.animationPlayState = 'paused'; observer.observe(el); });
+})();
+</script>
+<!-- ═══ delight:move-safe-reveal END ═══ -->
+</body>
+</html>

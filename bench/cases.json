@@ -1,0 +1,350 @@
+{
+  "_readme": "Hand-labelled ground truth for the judge bake-off. Labels are by design intent (DESIGN.md 5.2), not by model output — never edit a label to make a model look better. 'weight' 2 = double-weighted in scoring; these are the cases where a bad judge breaks the pedagogy. Percept histories are consistent with the canonical world (DESIGN.md 3.2).",
+  "world": "canonical",
+  "cases": [
+    {
+      "id": "P1-clean-first-move",
+      "tag": "perfect-first-move",
+      "weight": 1,
+      "move_number": 1,
+      "current_square": [1, 1],
+      "target_square": [2, 1],
+      "percept_history": [{ "square": [1, 1], "percepts": [] }],
+      "visited": [[1, 1]],
+      "student_flags": {},
+      "justification": "At [1,1] I felt no breeze and no stench. No breeze means no pit in any adjacent square, and no stench means the wumpus is not adjacent either. [2,1] is adjacent to [1,1], so it has neither. It is safe.",
+      "expect": { "R1": 1, "R2": 1, "R3": null, "R4": 1 },
+      "expect_verdict": "sound",
+      "note": "The gold standard. Accounts for BOTH dangers, so R2=1 and certainty is earned."
+    },
+    {
+      "id": "P2-terse-register",
+      "tag": "perfect-first-move",
+      "weight": 2,
+      "move_number": 1,
+      "current_square": [1, 1],
+      "target_square": [1, 2],
+      "percept_history": [{ "square": [1, 1], "percepts": [] }],
+      "visited": [[1, 1]],
+      "student_flags": {},
+      "justification": "1,1 nothing felt. no breeze no smell. so 1,2 no pit no wumpus. safe",
+      "expect": { "R1": 1, "R2": 1, "R3": null, "R4": 1 },
+      "expect_verdict": "sound",
+      "note": "GRAMMAR TEST. Logically identical to P1 in SMS register. Any model scoring this below P1 is penalising English and is disqualified."
+    },
+    {
+      "id": "P3-passive-phrasing",
+      "tag": "perfect-first-move",
+      "weight": 1,
+      "move_number": 1,
+      "current_square": [1, 1],
+      "target_square": [2, 1],
+      "percept_history": [{ "square": [1, 1], "percepts": [] }],
+      "visited": [[1, 1]],
+      "student_flags": {},
+      "justification": "Since nothing at all was sensed in the starting square [1,1], neither a pit nor the wumpus can be located in the squares touching it, one of which is [2,1].",
+      "expect": { "R1": 1, "R2": 1, "R3": null, "R4": 1 },
+      "expect_verdict": "sound"
+    },
+    {
+      "id": "N1-no-evidence-lucky",
+      "tag": "no-evidence",
+      "weight": 1,
+      "move_number": 1,
+      "current_square": [1, 1],
+      "target_square": [2, 1],
+      "percept_history": [{ "square": [1, 1], "percepts": [] }],
+      "visited": [[1, 1]],
+      "student_flags": {},
+      "justification": "It looks safe to me, I will go there.",
+      "expect": { "R1": 0, "R2": 0, "R3": null, "R4": 0 },
+      "expect_verdict": "unsupported",
+      "note": "Correct move, zero reasoning. Must score 0. This is the core inversion of the game."
+    },
+    {
+      "id": "N2-no-evidence-confident",
+      "tag": "no-evidence",
+      "weight": 1,
+      "move_number": 2,
+      "current_square": [1, 1],
+      "target_square": [1, 2],
+      "percept_history": [
+        { "square": [1, 1], "percepts": [] },
+        { "square": [2, 1], "percepts": ["breeze"] }
+      ],
+      "visited": [[1, 1], [2, 1]],
+      "student_flags": {},
+      "justification": "I am sure [1,2] is completely safe. I have a good feeling about the left side of the cave.",
+      "expect": { "R1": 0, "R2": 0, "R3": 0, "R4": 0 },
+      "expect_verdict": "unsupported",
+      "note": "R3=0 not null: two observations WERE available and went unused."
+    },
+    {
+      "id": "N3-restates-rule-only",
+      "tag": "no-evidence",
+      "weight": 1,
+      "move_number": 1,
+      "current_square": [1, 1],
+      "target_square": [2, 1],
+      "percept_history": [{ "square": [1, 1], "percepts": [] }],
+      "visited": [[1, 1]],
+      "student_flags": {},
+      "justification": "Breeze means a pit is adjacent and stench means the wumpus is adjacent, that is the rule of the game.",
+      "expect": { "R1": 0, "R2": 0, "R3": null, "R4": 0 },
+      "expect_verdict": "unsupported",
+      "note": "Recites rules, cites no observation, draws no conclusion about the target."
+    },
+    {
+      "id": "H1-invented-stench",
+      "tag": "fluent-but-wrong",
+      "weight": 2,
+      "move_number": 2,
+      "current_square": [1, 1],
+      "target_square": [1, 2],
+      "percept_history": [
+        { "square": [1, 1], "percepts": [] },
+        { "square": [2, 1], "percepts": ["breeze"] }
+      ],
+      "visited": [[1, 1], [2, 1]],
+      "student_flags": {},
+      "justification": "The stench I detected at [1,1] tells me the wumpus is adjacent to it, and since [2,1] had a breeze rather than a stench, the wumpus must be in [1,2] — so I will approach carefully knowing it is there.",
+      "expect": { "R1": 0, "R2": 0, "R3": 0, "R4": 0 },
+      "expect_verdict": "unsound",
+      "note": "HALLUCINATION TEST. There was NO stench at [1,1]. Fluent, structured, confident, and built on a percept that does not exist. A judge that awards R1 here is unusable."
+    },
+    {
+      "id": "H2-invented-breeze-location",
+      "tag": "fluent-but-wrong",
+      "weight": 2,
+      "move_number": 3,
+      "current_square": [1, 2],
+      "target_square": [1, 3],
+      "percept_history": [
+        { "square": [1, 1], "percepts": [] },
+        { "square": [2, 1], "percepts": ["breeze"] },
+        { "square": [1, 2], "percepts": ["stench"] }
+      ],
+      "visited": [[1, 1], [2, 1], [1, 2]],
+      "student_flags": {},
+      "justification": "Because I felt a breeze at [1,2] and not a stench, the danger in this column is a pit and not the wumpus, therefore [1,3] cannot contain the wumpus and I can safely enter it.",
+      "expect": { "R1": 0, "R2": 0, "R3": 0, "R4": 0 },
+      "expect_verdict": "unsound",
+      "note": "Inverts the actual percept at [1,2] (stench, not breeze) and reaches a conclusion that would walk straight into the Wumpus at [1,3]."
+    },
+    {
+      "id": "H3-wrong-adjacency-diagonal",
+      "tag": "fluent-but-wrong",
+      "weight": 2,
+      "move_number": 3,
+      "current_square": [2, 1],
+      "target_square": [2, 2],
+      "percept_history": [
+        { "square": [1, 1], "percepts": [] },
+        { "square": [2, 1], "percepts": ["breeze"] }
+      ],
+      "visited": [[1, 1], [2, 1]],
+      "student_flags": {},
+      "justification": "The breeze at [2,1] means a pit is diagonally adjacent, so the pit is in [1,2] or [3,2]. [2,2] is not diagonal from me so it is safe.",
+      "expect": { "R1": 1, "R2": 0, "R3": 0, "R4": 0 },
+      "expect_verdict": "unsound",
+      "note": "Percept correctly cited (R1=1) but the adjacency rule is wrong. R2 must be 0. Tests that R1 and R2 are graded independently."
+    },
+    {
+      "id": "C1-combine-eliminate-safe",
+      "tag": "combination",
+      "weight": 2,
+      "move_number": 3,
+      "current_square": [1, 1],
+      "target_square": [1, 2],
+      "percept_history": [
+        { "square": [1, 1], "percepts": [] },
+        { "square": [2, 1], "percepts": ["breeze"] }
+      ],
+      "visited": [[1, 1], [2, 1]],
+      "student_flags": { "1,2": "SAFE" },
+      "justification": "The breeze at [2,1] means a pit is in [1,1], [2,2] or [3,1]. But [1,1] is where I started and I already know it is safe, so the pit is in [2,2] or [3,1]. [1,2] is not one of those, and [1,1] had no stench so no wumpus next to it either. [1,2] is safe.",
+      "expect": { "R1": 1, "R2": 1, "R3": 1, "R4": 1 },
+      "expect_verdict": "sound",
+      "note": "The canonical Unit Resolution step from the slide. flags_wrong must be empty."
+    },
+    {
+      "id": "C2-combine-two-two-trap",
+      "tag": "combination",
+      "weight": 2,
+      "move_number": 4,
+      "current_square": [1, 2],
+      "target_square": [1, 1],
+      "percept_history": [
+        { "square": [1, 1], "percepts": [] },
+        { "square": [2, 1], "percepts": ["breeze"] },
+        { "square": [1, 2], "percepts": ["stench"] }
+      ],
+      "visited": [[1, 1], [2, 1], [1, 2]],
+      "student_flags": { "2,2": "PIT?", "1,3": "WUMPUS?" },
+      "justification": "Breeze at [2,1] put a pit in [2,2] or [3,1]. Now stench at [1,2] puts the wumpus in [1,3] or [2,2]. So [2,2] could hold a pit AND the wumpus — I am not going there. I retreat to [1,1] which I have already walked on safely.",
+      "expect": { "R1": 1, "R2": 1, "R3": 1, "R4": 1 },
+      "expect_verdict": "sound",
+      "note": "The [2,2] lesson from wumpus-world.md, reasoned correctly. Also tests that a retreat justification is graded normally."
+    },
+    {
+      "id": "C3-combine-partial-credit",
+      "tag": "combination",
+      "weight": 1,
+      "move_number": 3,
+      "current_square": [2, 1],
+      "target_square": [3, 1],
+      "percept_history": [
+        { "square": [1, 1], "percepts": [] },
+        { "square": [2, 1], "percepts": ["breeze"] }
+      ],
+      "visited": [[1, 1], [2, 1]],
+      "student_flags": {},
+      "justification": "Breeze at [2,1] means a pit in [1,1], [2,2] or [3,1]. [1,1] is safe so it is [2,2] or [3,1]. I know [3,1] might be the pit but it is my only way forward, so I accept the risk and go.",
+      "expect": { "R1": 1, "R2": 1, "R3": 1, "R4": 1 },
+      "expect_verdict": "sound",
+      "note": "IMPORTANT: this move may KILL the student. The reasoning is nonetheless flawless and openly names the risk, so it is full marks. A judge that penalises this is using hidden world knowledge and is disqualified."
+    },
+    {
+      "id": "O1-overclaim-two-two",
+      "tag": "overclaim",
+      "weight": 2,
+      "move_number": 3,
+      "current_square": [2, 1],
+      "target_square": [2, 2],
+      "percept_history": [
+        { "square": [1, 1], "percepts": [] },
+        { "square": [2, 1], "percepts": ["breeze"] }
+      ],
+      "visited": [[1, 1], [2, 1]],
+      "student_flags": { "2,2": "SAFE" },
+      "justification": "I felt a breeze at [2,1], so a pit is nearby, but [2,2] is definitely safe and there is no chance of a pit there.",
+      "expect": { "R1": 1, "R2": 0, "R3": 0, "R4": 0 },
+      "expect_verdict": "unsound",
+      "note": "[2,2] is an actual pit candidate from that very breeze. R4=0 for false certainty. flags_wrong must contain \"2,2\" — this is the Flag Accuracy signal."
+    },
+    {
+      "id": "O2-no-breeze-means-fully-safe",
+      "tag": "overclaim",
+      "weight": 2,
+      "move_number": 3,
+      "current_square": [1, 2],
+      "target_square": [1, 3],
+      "percept_history": [
+        { "square": [1, 1], "percepts": [] },
+        { "square": [1, 2], "percepts": ["stench"] }
+      ],
+      "visited": [[1, 1], [1, 2]],
+      "student_flags": { "1,3": "SAFE" },
+      "justification": "There was no breeze at [1,2], so there is no pit next to it. That means [1,3] is safe and I can go there with no risk.",
+      "expect": { "R1": 1, "R2": 0, "R3": 0, "R4": 0 },
+      "expect_verdict": "unsound",
+      "note": "THE most common student error (DESIGN 5.2 R2). No breeze rules out a pit only; the stench at [1,2] makes [1,3] a Wumpus candidate. Ignoring a percept that IS in the history must cost R2, R3 and R4."
+    },
+    {
+      "id": "O3-hedges-a-proved-fact",
+      "tag": "overclaim",
+      "weight": 1,
+      "move_number": 1,
+      "current_square": [1, 1],
+      "target_square": [2, 1],
+      "percept_history": [{ "square": [1, 1], "percepts": [] }],
+      "visited": [[1, 1]],
+      "student_flags": {},
+      "justification": "There was no breeze and no stench at [1,1], so [2,1] is maybe probably safe but honestly I cannot really be sure about anything here.",
+      "expect": { "R1": 1, "R2": 1, "R3": null, "R4": 0 },
+      "expect_verdict": "partial",
+      "note": "Inverse of O1: hedges something actually PROVED. R4=0 in both directions — the dimension tests calibration, not caution."
+    },
+    {
+      "id": "Q1-hedged-correct-risk",
+      "tag": "hedged-correct",
+      "weight": 1,
+      "move_number": 3,
+      "current_square": [1, 2],
+      "target_square": [2, 2],
+      "percept_history": [
+        { "square": [1, 1], "percepts": [] },
+        { "square": [2, 1], "percepts": ["breeze"] },
+        { "square": [1, 2], "percepts": ["stench"] }
+      ],
+      "visited": [[1, 1], [2, 1], [1, 2]],
+      "student_flags": { "2,2": "PIT?" },
+      "justification": "[2,2] could have a pit from the breeze at [2,1], and it could also have the wumpus from the stench at [1,2]. So it is probably the worst square on the board. I have no other unexplored neighbour though, so I am going but I know this might kill me.",
+      "expect": { "R1": 1, "R2": 1, "R3": 1, "R4": 0 },
+      "expect_verdict": "partial",
+      "note": "LABEL CORRECTED 2026-09-12 (was R4:1/sound). Verified by hand: by move 3 [2,2] is PROVED SAFE on both counts — no stench at [2,1] makes it wumpus-free, no breeze at [1,2] makes it pit-free. The student's hedging is therefore MIS-calibrated: they failed to notice they had already proved it safe, and called the safest reachable square 'the worst on the board'. R4=0. This is a valuable case precisely because it is the mirror of O3 — under-confidence from not tracking one's own deductions."
+    },
+    {
+      "id": "Q2-hedged-partial-info",
+      "tag": "hedged-correct",
+      "weight": 1,
+      "move_number": 2,
+      "current_square": [2, 1],
+      "target_square": [3, 1],
+      "percept_history": [
+        { "square": [1, 1], "percepts": [] },
+        { "square": [2, 1], "percepts": ["breeze"] }
+      ],
+      "visited": [[1, 1], [2, 1]],
+      "student_flags": { "3,1": "PIT?" },
+      "justification": "Breeze here at [2,1] so a pit is adjacent. It might be [3,1], I cannot tell yet. I will not claim it is safe.",
+      "expect": { "R1": 1, "R2": 1, "R3": 0, "R4": 1 },
+      "expect_verdict": "partial",
+      "note": "Correct and well-calibrated but never eliminates [1,1], so R3=0. Tests that R3 is not awarded for free."
+    },
+    {
+      "id": "Q3-hedged-wumpus-only",
+      "tag": "hedged-correct",
+      "weight": 1,
+      "move_number": 3,
+      "current_square": [1, 2],
+      "target_square": [2, 2],
+      "percept_history": [
+        { "square": [1, 1], "percepts": [] },
+        { "square": [1, 2], "percepts": ["stench"] }
+      ],
+      "visited": [[1, 1], [1, 2]],
+      "student_flags": {},
+      "justification": "Stench at [1,2] means wumpus in [1,3] or [2,2] — [1,1] is ruled out since I walked there. No breeze at [1,2] so at least there is no pit in [2,2]. Wumpus risk remains, so I am unsure.",
+      "expect": { "R1": 1, "R2": 1, "R3": 1, "R4": 1 },
+      "expect_verdict": "sound",
+      "note": "Separates the two dangers cleanly and eliminates [1,1] via a visited square. Model conceptual performance."
+    },
+    {
+      "id": "L1-malayalam-register",
+      "tag": "register",
+      "weight": 2,
+      "move_number": 3,
+      "current_square": [2, 1],
+      "target_square": [1, 1],
+      "percept_history": [
+        { "square": [1, 1], "percepts": [] },
+        { "square": [2, 1], "percepts": ["breeze"] }
+      ],
+      "visited": [[1, 1], [2, 1]],
+      "student_flags": {},
+      "justification": "breeze is coming in 2,1 itself. so pit will be there in 2,2 or 3,1 only, because 1,1 i already went and nothing happened. so now i am going back to 1,1 itself, it is safe one.",
+      "expect": { "R1": 1, "R2": 1, "R3": 1, "R4": 1 },
+      "expect_verdict": "sound",
+      "note": "REGISTER TEST. Indian-English classroom register, flawless logic including the [1,1] elimination. Must score identically to C1. Any downgrade here is grammar-penalising and disqualifies the model."
+    },
+    {
+      "id": "L2-mixed-register-partial",
+      "tag": "register",
+      "weight": 2,
+      "move_number": 2,
+      "current_square": [1, 1],
+      "target_square": [1, 2],
+      "percept_history": [
+        { "square": [1, 1], "percepts": [] },
+        { "square": [2, 1], "percepts": ["breeze"] }
+      ],
+      "visited": [[1, 1], [2, 1]],
+      "student_flags": {},
+      "justification": "1,1 la onnum illa, no smell no breeze. so 1,2 is ok i think, pit um illa wumpus um illa.",
+      "expect": { "R1": 1, "R2": 1, "R3": 0, "R4": 1 },
+      "expect_verdict": "partial",
+      "note": "Code-mixed Malayalam-English. The logic (nothing at [1,1] => [1,2] clear of both) is valid: R1=R2=1. R3=0, the breeze at [2,1] is unused. A judge must not score this 0 merely because it cannot parse Malayalam."
+    }
+  ]
+}
